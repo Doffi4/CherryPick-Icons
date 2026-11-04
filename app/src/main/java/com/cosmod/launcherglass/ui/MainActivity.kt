@@ -1060,7 +1060,8 @@ class MainActivity : AppCompatActivity() {
         add(about,text(getString(R.string.ui_credits_title),16f,bold=true),top=12)
         for((label,url) in listOf(
             "PixelLauncherEnhanced — Mahmud0808" to "https://github.com/Mahmud0808/PixelLauncherEnhanced",
-            "@anime_killer2009" to "https://t.me/anime_killer2009")) {
+            "@anime_killer2009" to "https://t.me/anime_killer2009",
+            "Kostubet Topics" to "https://t.me/KostubetTopics")) {
             add(about,text(label,14f).apply {
                 setTextColor(primary);minHeight=dp(48);gravity=Gravity.CENTER_VERTICAL
                 setOnClickListener {

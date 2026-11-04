@@ -32,6 +32,8 @@
 3. Выберите Flux в системных настройках иконок.
 4. Откройте модуль, настройте эффекты и перезапустите лаунчер.
 
+[Подробный гайд по установке](INSTALL.md#русский)
+
 ### Сборка
 
 Нужны JDK 17 и Android SDK с платформой API 35. Укажите путь к SDK в локальном
@@ -68,8 +70,8 @@ APK появится в `app/build/outputs/apk/release/app-release.apk`.
 
 ### Благодарности и лицензия
 
-[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) - Mahmud0808.
-Спасибо [@anime_killer2009](https://t.me/anime_killer2009) за помощь.
+Спасибо [PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) / Mahmud0808 за разрешение на использование файлов.
+Спасибо [@anime_killer2009](https://t.me/anime_killer2009) и [Kostubet Topics](https://t.me/KostubetTopics) за помощь.
 Подробности заимствований: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 Лицензия: [GNU GPL v3](COPYING).
 
@@ -108,6 +110,8 @@ Currently supports ColorOS17/OxygenOS17/RUI7. Version 16 has barely been tested;
 3. Select Flux in the system icon settings.
 4. Open the module, adjust the effects, and restart the launcher.
 
+[Detailed installation guide](INSTALL.md#english)
+
 ### Building
 
 Use JDK 17 and Android SDK platform API 35. Set the SDK location in your local
@@ -144,8 +148,8 @@ validation artifacts and are not included in the published source.
 
 ### Credits and license
 
-[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) - Mahmud0808.
-Thanks to [@anime_killer2009](https://t.me/anime_killer2009) for their help.
+Thanks to [PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) / Mahmud0808 for permission to use the files.
+Thanks to [@anime_killer2009](https://t.me/anime_killer2009) and [Kostubet Topics](https://t.me/KostubetTopics) for their help.
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for adaptation details.
 License: [GNU GPL v3](COPYING).
 

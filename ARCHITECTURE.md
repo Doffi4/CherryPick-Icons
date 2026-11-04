@@ -1,4 +1,10 @@
-# CherryPick Icons 0.2.34
+# CherryPick Icons 0.2.35
+
+Release artwork and documentation:
+
+- The launcher icon uses the author's supplied cherry artwork. The foreground is inset to retain the full drawing under adaptive icon masks; the same artwork extends its background.
+- Kostubet Topics is included alongside the existing acknowledgements in settings and both README languages.
+- A bilingual installation guide covers root access, LSPosed scope, Flux, module activation, launcher restart and diagnostics before reporting bugs.
 
 First beta release:
 
