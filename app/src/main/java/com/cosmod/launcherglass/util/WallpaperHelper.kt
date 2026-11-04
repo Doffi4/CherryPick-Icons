@@ -71,12 +71,15 @@ object WallpaperHelper {
         val h=minOf(600+options.quality*12,raw.height)
         val w=(raw.width.toFloat()*h/raw.height).roundToInt().coerceAtLeast(1)
         val radius=options.radius*(h/800f)*(if(options.liquid).28f else 1f)
-        val image=try {
+        val gpuImage=if(PrefsHelper.gpuEffects)try {
             val input=if(android.os.Build.VERSION.SDK_INT<33)BackdropVibrancy.applyCpu(raw,options.vibrancy)else raw
             val gpu=try {GpuWallpaperBlur.blurFolder(input,w,h,radius,options.lightening,options.vibrancy)}finally{if(input!==raw)input.recycle()}
             if(ShadowTone.gpuSupported)gpu else ShadowTone.applyCpu(gpu,options.lightening).also {if(it!==gpu)gpu.recycle()}
         }catch(t:Throwable){
             GlassLogger.e("FolderMaterial","Folder GPU processing unavailable; using CPU",t)
+            null
+        }else null
+        val image=gpuImage ?: run {
             val scaled=Bitmap.createScaledBitmap(raw,w,h,true)
             val software=if(scaled.config==Bitmap.Config.HARDWARE)scaled.copy(Bitmap.Config.ARGB_8888,false) ?: return candidate else scaled
             val vivid=BackdropVibrancy.applyCpu(software,options.vibrancy)
@@ -245,9 +248,12 @@ object WallpaperHelper {
 
 
 
+    @Volatile private var processingActive=false
     fun onProcessingSettingsChanged() {
 
-        if (!PrefsHelper.enabled || !PrefsHelper.blurEnabled) loader.execute { GpuWallpaperBlur.close() }
+        val active=PrefsHelper.enabled && PrefsHelper.blurEnabled
+        if(processingActive && !active)loader.execute { GpuWallpaperBlur.close() }
+        processingActive=active
 
     }
 
@@ -552,7 +558,7 @@ object WallpaperHelper {
 
             val effectRadius = radius * (targetH / 800f) * (if(PrefsHelper.liquidGlass).28f else 1f)
 
-            try {
+            if(PrefsHelper.gpuEffects)try {
 
                 val input=if(android.os.Build.VERSION.SDK_INT<33)BackdropVibrancy.applyCpu(rawBitmap,PrefsHelper.blurVibrancy)else rawBitmap
                 val gpu=try {GpuWallpaperBlur.blur(input, targetW, targetH, effectRadius)}finally{if(input!==rawBitmap)input.recycle()}

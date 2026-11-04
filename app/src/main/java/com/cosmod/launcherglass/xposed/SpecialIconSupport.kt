@@ -11,14 +11,19 @@ import java.util.WeakHashMap
 
 /** Discover the actual native draw override, including OEM dynamic drawables. */
 internal object SpecialIconSupport {
-    private val clocks=setOf("com.coloros.alarmclock","com.android.deskclock","com.android.alarmclock")
-    private val calendars=setOf("com.coloros.calendar","com.android.calendar","com.google.android.calendar")
+    private val clocks=setOf("com.coloros.alarmclock","com.oplus.alarmclock","com.oneplus.deskclock","com.google.android.deskclock","com.android.deskclock","com.android.alarmclock")
+    private val calendars=setOf("com.coloros.calendar","com.oplus.calendar","com.android.calendar","com.google.android.calendar")
     private val packages=WeakHashMap<Drawable,String>()
     private val methods=HashSet<Method>()
     private val failures=HashSet<String>()
     private val components=WeakHashMap<Any,String>()
+    private val viewLogs=HashSet<String>()
     private var plate:Bitmap?=null
     fun packageOf(drawable:Drawable)=packages[drawable]
+    fun dynamic(drawable:Drawable)=packages[drawable] in clocks || packages[drawable] in calendars
+    fun isContainer(drawable:Drawable)=drawable.javaClass.name.let {
+        it=="com.android.launcher3.folder.FolderPreviewDrawable" || it=="com.android.launcher3.folder.big.stacked.StackedDrawable"
+    }
     fun tick(drawable:Drawable):Long?=when(packages[drawable]){
         in clocks -> System.currentTimeMillis()/1000L
         in calendars -> System.currentTimeMillis()/60_000L
@@ -27,30 +32,41 @@ internal object SpecialIconSupport {
     fun rememberMask(mask:Bitmap){plate=mask}
     private fun component(item:Any):String {
         components[item]?.let {return it}
-        val pkg=try {(XposedHelpers.callMethod(item,"getTargetComponent") as? ComponentName)?.packageName ?: ""}catch(_:Throwable){""}
+        val pkg=(NativeIconAccess.call(item,"getTargetComponent") as? ComponentName)?.packageName ?: ""
+        // A workspace item can be drawn before asynchronous binding fills its intent.
         if(pkg.isNotEmpty())components[item]=pkg
         return pkg
     }
     fun bind(view:View,isRecording:()->Boolean,render:(Drawable,Canvas)->Boolean){
         val tag=view.tag ?: return
         val pkg=component(tag)
+        if(view.width>view.height && viewLogs.add("${tag.javaClass.name}:$pkg:${view.width}x${view.height}")) {
+            val icon=NativeIconAccess.call(view,"getIcon") as? Drawable
+            val fancy=NativeIconAccess.call(view,"getOriginFancyDrawable") as? Drawable
+            GlassLogger.i("SpecialIcons","Wide host: tag=${tag.javaClass.name}, package=$pkg, icon=${icon?.javaClass?.name}/${icon?.bounds}, fancy=${fancy?.javaClass?.name}/${fancy?.bounds}")
+        }
         if(pkg !in clocks && pkg !in calendars && pkg!="com.geteit.andwobble")return
         val drawables=LinkedHashSet<Drawable>()
-        for(name in listOf("getIcon","getIconDisplay","getOriginFancyDrawable"))try {
-            (XposedHelpers.callMethod(view,name) as? Drawable)?.let {drawables.add(it)}
-        }catch(_:Throwable){}
-        try {(XposedHelpers.getObjectField(view,"mLayerDrawable") as? Drawable)?.let {drawables.add(it)}}catch(_:Throwable){}
+        for(name in listOf("getIcon","getOriginFancyDrawable")) {
+            (NativeIconAccess.call(view,name) as? Drawable)?.let {drawables.add(it)}
+        }
+        (NativeIconAccess.field(view,"mLayerDrawable") as? Drawable)?.let {drawables.add(it)}
+        if(view is android.widget.TextView)view.compoundDrawables.filterNotNull().forEach {drawables.add(it)}
         for(drawable in drawables)bind(drawable,tag,isRecording,render)
     }
     /** Folder previews have item metadata, but no BubbleTextView to bind from. */
     fun bind(drawable:Drawable,item:Any,isRecording:()->Boolean,render:(Drawable,Canvas)->Boolean):Boolean {
+        // A stacked group may inherit its first child's tag. Its native animator
+        // must continue drawing individual children, including previous/current lists.
+        if(isContainer(drawable)) {packages.remove(drawable);return false}
         val pkg=component(item)
         if(pkg !in clocks && pkg !in calendars && pkg!="com.geteit.andwobble")return false
+        if(packages[drawable]==pkg)return true
         packages[drawable]=pkg
         val method=drawable.javaClass.getMethod("draw",Canvas::class.java)
         if(!methods.add(method))return true
         GlassLogger.i("SpecialIcons","Native override: $pkg -> ${drawable.javaClass.name}, draw=${method.declaringClass.name}")
-        XposedBridge.hookMethod(method,object:XC_MethodHook(PRIORITY_HIGHEST){
+        ModuleHooks.hookMethod(method,object:XC_MethodHook(PRIORITY_HIGHEST){
             override fun beforeHookedMethod(param:MethodHookParam){
                 if(!PrefsHelper.enabled || isRecording())return
                 val icon=param.thisObject as? Drawable ?: return

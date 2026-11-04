@@ -104,4 +104,14 @@
     <string name="ui_haze_test">iOS haze · experimental</string>
     <string name="ui_haze_hint">An experimental approximation: reduced contrast and a broad luminous veil on the glass. Blur radius works as usual, including 0. Logo and contour are preserved. Independent of color depth.</string>
     <string name="ui_photo_widget_tint_hint">Off: original photo colors. On: match icon color.</string>
+    <string name="ui_presets">Settings presets</string>
+    <string name="ui_gpu_effects">GPU effects</string>
+    <string name="ui_gpu_effects_hint">On: GPU. Off: CPU. Applies to blur, refraction and material effects. Developer mode off uses GPU.</string>
+    <string name="ui_presets_hint">Save your settings to a JSON file to share them. Import replaces module settings; language and device status stay on this device.</string>
+    <string name="ui_export_settings">Export settings</string>
+    <string name="ui_import_settings">Import settings</string>
+    <string name="ui_settings_imported">Settings imported</string>
+    <string name="ui_settings_exported">Settings exported</string>
+    <string name="ui_settings_transfer_error">Could not transfer settings: %1$s</string>
+    <string name="ui_file_picker_error">No file picker available</string>
 </resources>

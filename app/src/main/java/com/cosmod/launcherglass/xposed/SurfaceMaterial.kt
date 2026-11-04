@@ -12,6 +12,9 @@ internal object SurfaceMaterial {
     private data class Key(val width:Int,val height:Int,val radius:Int,val shape:Int,val native:Int)
     private data class Shape(val mask:Bitmap,val empty:Bitmap)
     private val shapes=object:LruCache<Key,Shape>(12){}
+    var geometryRevision=0L
+        private set
+    fun invalidateGeometry(){geometryRevision++;shapes.evictAll()}
     private fun shape(bounds:Rect,radius:Float,path:Path?,native:android.graphics.drawable.Drawable?=null,nativeMask:Bitmap?=null,pathFingerprint:Int?=null):Shape {
         val scale=minOf(1f,384f/maxOf(bounds.width(),bounds.height()))
         val w=(bounds.width()*scale).toInt().coerceAtLeast(1)

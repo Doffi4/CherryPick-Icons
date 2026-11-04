@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.view.*
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.Keep
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatImageButton
@@ -42,6 +43,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var root: LinearLayout
     private lateinit var page: FrameLayout
     private val executor = Executors.newSingleThreadExecutor()
+    private val exportSettings = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) transferSettings(uri, false)
+    }
+    private val importSettings = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) transferSettings(uri, true)
+    }
     private data class Gate(val view: View, val allowed: () -> Boolean)
     private val gates = mutableListOf<Gate>()
     private val resets = mutableListOf<Pair<View, List<String>>>()
@@ -378,6 +385,55 @@ class MainActivity : AppCompatActivity() {
             liquid.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE
             refreshers.add {liquid.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE}
             add(details,liquid)
+        }
+        settingsTransferSection(body)
+    }
+
+    private fun settingsTransferSection(body: LinearLayout) {
+        val content = column().apply { setPadding(dp(20), dp(20), dp(20), dp(12)) }
+        add(content, text(getString(R.string.ui_presets), 19f, bold = true))
+        add(content, text(getString(R.string.ui_presets_hint), 14f, true), top = 8, bottom = 12)
+        for ((label, action) in listOf<Pair<Int, () -> Unit>>(
+            R.string.ui_export_settings to { exportSettings.launch("CherryPick_${BuildConfig.VERSION_NAME}_settings.json") },
+            R.string.ui_import_settings to { importSettings.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+        )) {
+            add(content, com.google.android.material.button.MaterialButton(this, null, M.attr.materialButtonOutlinedStyle).apply {
+                text = getString(label); isAllCaps = false; minHeight = dp(48)
+                setOnClickListener {
+                    haptic(it)
+                    try { action() } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, R.string.ui_file_picker_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }, bottom = 8)
+        }
+        add(body, card(content), top = 24)
+    }
+
+    private fun transferSettings(uri: Uri, importing: Boolean) {
+        executor.execute {
+            try {
+                if (importing) {
+                    val values = contentResolver.openInputStream(uri)?.use(SettingsTransfer::read)
+                        ?: error("Cannot open preset")
+                    SettingsTransfer.apply(prefs, values)
+                    contentResolver.notifyChange(SettingsProvider.CONTENT_URI, null)
+                } else {
+                    val json = SettingsTransfer.export(prefs)
+                    val output = contentResolver.openOutputStream(uri, "wt") ?: error("Cannot create preset")
+                    output.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
+                }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        if (importing) showPage(false)
+                        Toast.makeText(this, if (importing) R.string.ui_settings_imported else R.string.ui_settings_exported, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) Toast.makeText(this, getString(R.string.ui_settings_transfer_error, e.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -973,6 +1029,9 @@ class MainActivity : AppCompatActivity() {
         val developer=column()
         add(developer,switchRow(getString(R.string.ui_developer_mode),SettingsProvider.KEY_DEVELOPER_MODE))
         val developerOptions=column()
+        divider(developerOptions)
+        add(developerOptions,switchRow(getString(R.string.ui_gpu_effects),SettingsProvider.KEY_GPU_EFFECTS))
+        add(developerOptions,text(getString(R.string.ui_gpu_effects_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
         divider(developerOptions)
         add(developerOptions,switchRow(getString(R.string.ui_color_depth),SettingsProvider.KEY_COLOR_DEPTH_ENABLED))
         add(developerOptions,text(getString(R.string.ui_color_depth_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})

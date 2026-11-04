@@ -23,9 +23,10 @@ import java.util.concurrent.atomic.AtomicReference
 object NativeSurfaceLive {
     private val main = Handler(Looper.getMainLooper())
     private val lock = Any()
-    private val submitter by lazy {
+    private val submitterDelegate=lazy {
         Handler(HandlerThread("CherryPickSurface",Process.THREAD_PRIORITY_DISPLAY).apply {start()}.looper)
     }
+    private val submitter by submitterDelegate
     private val pending=AtomicBoolean(false)
     private data class Pose(val xx:Float=1f,val xy:Float=0f,val yx:Float=0f,val yy:Float=1f,
         val x:Float=0f,val y:Float=0f,val positioned:Boolean=false,val transformed:Boolean=false,val version:Long=0L)
@@ -69,8 +70,10 @@ object NativeSurfaceLive {
         }
     }
     fun onSettingsChanged(){
-        if(!PrefsHelper.enabled || !PrefsHelper.blurEnabled)submitter.post {
-            pool.forEach {it.close()};pool.clear();warmed.set(false)
+        if(!PrefsHelper.enabled || !PrefsHelper.blurEnabled){
+            retire("module disabled") {true}
+            synchronized(lock){leases.clear();controls.clear();templates.clear()}
+            if(submitterDelegate.isInitialized())submitter.post {pool.forEach {it.close()};pool.clear();warmed.set(false)}
         }
     }
     private val templates=object:LinkedHashMap<Int,Capture>(12,.75f,true){
@@ -332,13 +335,13 @@ object NativeSurfaceLive {
         val namespace=if(renderer!=null)"com.android.launcher3.anim.iconsurfacemanager.surface" else "com.android.launcher3.anim.iconsurfacemanager"
         val type=XposedHelpers.findClassIfExists("$namespace.IconSurfaceRecord",loader) ?: return
         GlassLogger.i("LiveSurface","Native surface integration: $namespace")
-        for(method in listOf("setPosition","setMatrix"))XposedBridge.hookAllMethods(SurfaceControl.Transaction::class.java,method,object:XC_MethodHook(){
+        for(method in listOf("setPosition","setMatrix"))ModuleHooks.hookAllMethods(SurfaceControl.Transaction::class.java,method,object:XC_MethodHook(){
             override fun afterHookedMethod(param:MethodHookParam){if(!param.hasThrowable())observeTransform(param,method=="setPosition")}
         })
         // Native record IDs distinguish a late completion callback from a new
         // animation using the same SurfaceControl or clicked View.
         if(renderer!=null)for (method in listOf("transferViewToSurface", "redrawViewToSurface")) {
-            XposedBridge.hookAllMethods(renderer, method, object : XC_MethodHook() {
+            ModuleHooks.hookAllMethods(renderer, method, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     param.setObjectExtra("priorRecord", record.get()); record.set(param.args.firstOrNull() as? Int)
                 }
@@ -348,7 +351,7 @@ object NativeSurfaceLive {
         // 16.6.13 performs the draw inside IconSurfaceRecord. Its provider
         // returns the exact buffer before lockHardwareCanvas/onDrawShadow.
         // Scope capture to that transfer; never replay the OEM shadow builder.
-        if(renderer==null)XposedBridge.hookAllMethods(type,"transferViewToSurface",object:XC_MethodHook(){
+        if(renderer==null)ModuleHooks.hookAllMethods(type,"transferViewToSurface",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
                 param.setObjectExtra("priorTransfer",legacyTransfer.get());legacyTransfer.set(param)
                 param.setObjectExtra("priorRecord",record.get())
@@ -361,7 +364,7 @@ object NativeSurfaceLive {
                 }
             }
         })
-        if(renderer!=null)XposedBridge.hookAllMethods(renderer, "drawViewToSurface", object : XC_MethodHook() {
+        if(renderer!=null)ModuleHooks.hookAllMethods(renderer, "drawViewToSurface", object : XC_MethodHook() {
             override fun beforeHookedMethod(param: MethodHookParam) {
                 val surface=param.args.filterIsInstance<Surface>().firstOrNull() ?: return
                 beginCapture(param,surface,param.args.filterIsInstance<View>().lastOrNull())
@@ -370,7 +373,7 @@ object NativeSurfaceLive {
         })
         val provider = XposedHelpers.findClassIfExists("$namespace.IconSurfaceProvider", loader)
         if (provider != null) {
-            XposedBridge.hookAllMethods(provider, "getSurfaceControl", object : XC_MethodHook() {
+            ModuleHooks.hookAllMethods(provider, "getSurfaceControl", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val holder = param.result ?: return
                     try {
@@ -389,7 +392,7 @@ object NativeSurfaceLive {
                 }
             })
             for (method in listOf("hideSurfaceControl", "resetSurfaceControl", "releaseSurfaceControl")) {
-                XposedBridge.hookAllMethods(provider, method, object : XC_MethodHook() {
+                ModuleHooks.hookAllMethods(provider, method, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val control = param.args.filterIsInstance<SurfaceControl>().firstOrNull() ?: return
                         retire(method) { it.lease?.control === control }
@@ -401,10 +404,10 @@ object NativeSurfaceLive {
                 })
             }
         }
-        XposedBridge.hookAllMethods(type,"reuseIconSurface",object:XC_MethodHook(){
+        ModuleHooks.hookAllMethods(type,"reuseIconSurface",object:XC_MethodHook(){
             override fun afterHookedMethod(param:MethodHookParam){resume(param.thisObject)}
         })
-        XposedBridge.hookAllMethods(type, "showOriginalIcon", object : XC_MethodHook() {
+        ModuleHooks.hookAllMethods(type, "showOriginalIcon", object : XC_MethodHook() {
             override fun beforeHookedMethod(param: MethodHookParam) {
                 val id = try { XposedHelpers.callMethod(param.thisObject, "getRecordId") as? Int } catch (_: Throwable) { null } ?: return
                 synchronized(lock) {

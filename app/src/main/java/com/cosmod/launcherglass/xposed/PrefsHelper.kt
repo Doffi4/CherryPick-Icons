@@ -14,6 +14,8 @@ import com.cosmod.launcherglass.util.WallpaperHelper
 object PrefsHelper {
 
     @Volatile var enabled: Boolean = SettingsDefaults.boolean(SettingsProvider.KEY_ENABLED)
+    @Volatile var gpuEffects: Boolean = true
+        private set
     @Volatile var bgOpacity: Int = SettingsDefaults.integer(SettingsProvider.KEY_BG_OPACITY)
     @Volatile var blurEnabled: Boolean = SettingsDefaults.boolean(SettingsProvider.KEY_BLUR_ENABLED)
     @Volatile var colorDepthBits=24
@@ -149,6 +151,8 @@ object PrefsHelper {
             val newPhotoWidgetOpacity=bundle.getInt(SettingsProvider.KEY_PHOTO_WIDGET_OPACITY,55).coerceIn(0,100)
             val newPhotoWidgetTint=bundle.getBoolean(SettingsProvider.KEY_PHOTO_WIDGET_TINT,false)
             val developer=bundle.getBoolean(SettingsProvider.KEY_DEVELOPER_MODE,false)
+            val newGpuEffects=!developer || bundle.getBoolean(SettingsProvider.KEY_GPU_EFFECTS,true)
+            val backendChanged=newGpuEffects!=gpuEffects
             val newColorDepth=if(developer && android.os.Build.VERSION.SDK_INT>=33 && bundle.getBoolean(SettingsProvider.KEY_COLOR_DEPTH_ENABLED,false))bundle.getInt(SettingsProvider.KEY_COLOR_DEPTH_BITS,8).coerceIn(8,24)else 24
             val newDepthStage=bundle.getInt(SettingsProvider.KEY_COLOR_DEPTH_STAGE,ColorDepthEffect.FINISHED_PLATE).coerceIn(0,3)
             val newHaze=developer && android.os.Build.VERSION.SDK_INT>=33 && bundle.getBoolean(SettingsProvider.KEY_HAZE_ENABLED,false)
@@ -235,7 +239,7 @@ object PrefsHelper {
                 LiveBlurEngine.invalidate()
             }
             val folderEnabledChanged=newFolderBlurEnabled!=folderBlurEnabled
-            val materialChanged=newBgOpacity!=bgOpacity || newBlurEnabled!=blurEnabled ||
+            val materialChanged=backendChanged || newBgOpacity!=bgOpacity || newBlurEnabled!=blurEnabled ||
                 newFolderBlurEnabled!=folderBlurEnabled || newFolderIconsBlurEnabled!=folderIconsBlurEnabled || newDrawerBlurEnabled!=drawerBlurEnabled ||
                 newIconStroke != iconStroke || newStrokeOpacity != strokeOpacity ||
                 newGlyphShadow != glyphShadow || newShadowOpacity != shadowOpacity ||
@@ -249,6 +253,7 @@ object PrefsHelper {
             }
             iconPalette = newPalette
             enabled = newEnabled
+            gpuEffects=newGpuEffects
             bgOpacity = newBgOpacity
             blurEnabled = newBlurEnabled
             colorDepthBits=newColorDepth
@@ -265,7 +270,7 @@ object PrefsHelper {
             blurStyle = newBlurStyle
             blurVibrancy=newBlurVibrancy
             blurQuality=newBlurQuality;liquidWidth=newLiquidWidth;liquidDistortion=newLiquidDistortion
-            if(blurStyleChanged || qualityChanged || vibrancyChanged || processingDepthChanged)WallpaperHelper.invalidate()
+            if(blurStyleChanged || qualityChanged || vibrancyChanged || processingDepthChanged || backendChanged)WallpaperHelper.invalidate()
             liveFps = newLiveFps
             idlePause = newIdlePause
             iconStroke = newIconStroke
@@ -296,15 +301,25 @@ object PrefsHelper {
                 IconGlassHook.invalidateFolderPreviews()
                 IconGlassHook.invalidateActiveIcons()
             }
-            if (masterChanged) {
+            if (masterChanged || backendChanged) {
                 IconGlassHook.onIconThemeChanged()
                 IconGlassHook.reloadNativeIcons()
             }
 
+            if(enabled){
+                ModuleHooks.setEnabled(true)
+                com.cosmod.launcherglass.util.LauncherWallpaperCapture.onModuleEnabled()
+            }
             LiveBlurEngine.onPrefsChanged()
             NativeSurfaceLive.onSettingsChanged()
             FolderMaterialHook.onSettingsChanged()
+            MultiIconMaterialHook.onSettingsChanged()
             PhotoWidgetMaterial.onSettingsChanged()
+            if(!enabled){
+                IconGlassHook.onModuleDisabled()
+                com.cosmod.launcherglass.util.LauncherWallpaperCapture.onModuleDisabled()
+                ModuleHooks.setEnabled(false)
+            }
             loaded=true
 
             GlassLogger.i(

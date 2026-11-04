@@ -251,6 +251,14 @@ object LiveBlurEngine {
     }
 
     fun onPrefsChanged() = onMainThread {
+        if(!PrefsHelper.enabled){
+            LauncherWallpaperCapture.stopMotionWatch()
+            mainHandler.removeCallbacks(tickerRunnable);isTickerRunning.set(false)
+            isMoving=false;isWallpaperMoving=false;activePointerCount=0
+            isEditing=false;isAppLaunchInProgress=false;isWorkspaceBlurSuspended=false
+            transitionRefreshUntilMs=0L
+            return@onMainThread
+        }
         LauncherWallpaperCapture.stopMotionWatch()
         IconGlassHook.invalidateFolderPreviews()
         if (PrefsHelper.blurMode == SettingsProvider.BLUR_MODE_LIVE) {

@@ -93,6 +93,7 @@ object SettingsDefaults {
     }
     private val booleans = mapOf(
         SettingsProvider.KEY_DEVELOPER_MODE to false,
+        SettingsProvider.KEY_GPU_EFFECTS to true,
         SettingsProvider.KEY_COLOR_DEPTH_ENABLED to false,
         SettingsProvider.KEY_HAZE_ENABLED to false,
         SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION to true,
@@ -150,6 +151,10 @@ object SettingsDefaults {
         SettingsProvider.KEY_SHADOW_OPACITY to 40,
         SettingsProvider.KEY_GRADIENT_OPACITY to 50
     )
+    /** Only portable module preferences. Device reports, language and migration keys stay local. */
+    fun portable(): Map<String, Any> = booleans + integers + mapOf(FolderSettingsKeys.OWN to false) +
+        FolderSettingsKeys.booleans.associate { FolderSettingsKeys.key(it) to boolean(it) } +
+        FolderSettingsKeys.integers.associate { FolderSettingsKeys.key(it) to integer(it) }
     fun boolean(key: String): Boolean = if(key==FolderSettingsKeys.OWN)false else booleans[key] ?: if(key.startsWith("folder_"))boolean(key.removePrefix("folder_"))else booleans.getValue(key)
     fun integer(key: String): Int = integers[key] ?: if(key.startsWith("folder_"))integer(key.removePrefix("folder_"))else integers.getValue(key)
     fun value(key: String): Any = if(key==FolderSettingsKeys.OWN)false else booleans[key] ?: integers[key] ?: if(key.startsWith("folder_"))value(key.removePrefix("folder_"))else integers.getValue(key)

@@ -52,6 +52,7 @@ class HookEntry : IXposedHookLoadPackage {
                 GlassLogger.i("HookEntry", "Initializing PrefsHelper via $source (Context: $appCtx)")
                 com.cosmod.launcherglass.util.WallpaperHelper.appContext = appCtx
                 IconGlassHook.appContext = appCtx
+                Oxygen16IconSupport.configure(appCtx)
                 PrefsHelper.init(appCtx)
                 try {
                     val filter = android.content.IntentFilter(android.content.Intent.ACTION_WALLPAPER_CHANGED).apply {
@@ -61,6 +62,7 @@ class HookEntry : IXposedHookLoadPackage {
                     }
                     appCtx.registerReceiver(object : android.content.BroadcastReceiver() {
                         override fun onReceive(c: Context?, i: android.content.Intent?) {
+                            if(!PrefsHelper.enabled)return
                             when(i?.action) {
                                 android.content.Intent.ACTION_SCREEN_OFF -> {
                                     com.cosmod.launcherglass.util.LauncherWallpaperCapture.onScreenOff()
@@ -81,10 +83,12 @@ class HookEntry : IXposedHookLoadPackage {
                     }, filter)
                     val wallpaperHandler = android.os.Handler(android.os.Looper.getMainLooper())
                     val refreshWallpaper = Runnable {
+                        if(!PrefsHelper.enabled)return@Runnable
                         com.cosmod.launcherglass.util.WallpaperHelper.onSystemWallpaperChanged()
                     }
                     val wallpaperObserver = object : android.database.ContentObserver(wallpaperHandler) {
                         override fun onChange(selfChange: Boolean) {
+                            if(!PrefsHelper.enabled)return
                             wallpaperHandler.removeCallbacks(refreshWallpaper)
                             wallpaperHandler.postDelayed(refreshWallpaper, 200L)
                         }
@@ -138,7 +142,7 @@ class HookEntry : IXposedHookLoadPackage {
                         }
                     )
 
-                    XposedHelpers.findAndHookMethod(
+                    ModuleHooks.findAndHookMethod(
                         launcherActivityClass,
                         "onResume",
                         object : XC_MethodHook() {
@@ -152,7 +156,7 @@ class HookEntry : IXposedHookLoadPackage {
                         }
                     )
 
-                    XposedHelpers.findAndHookMethod(
+                    ModuleHooks.findAndHookMethod(
                         launcherActivityClass,
                         "onPause",
                         object : XC_MethodHook() {
@@ -162,7 +166,7 @@ class HookEntry : IXposedHookLoadPackage {
                         }
                     )
 
-                    XposedHelpers.findAndHookMethod(
+                    ModuleHooks.findAndHookMethod(
                         launcherActivityClass,
                         "dispatchTouchEvent",
                         android.view.MotionEvent::class.java,
@@ -188,7 +192,7 @@ class HookEntry : IXposedHookLoadPackage {
             for (pagedName in pagedClasses) {
                 try {
                     val pagedClass = XposedHelpers.findClassIfExists(pagedName, lpparam.classLoader) ?: continue
-                    XposedHelpers.findAndHookMethod(
+                    ModuleHooks.findAndHookMethod(
                         pagedClass,
                         "onScrollChanged",
                         Int::class.javaPrimitiveType,
@@ -232,7 +236,7 @@ class HookEntry : IXposedHookLoadPackage {
             )) {
                 try {
                     val cls = XposedHelpers.findClassIfExists(name, lpparam.classLoader) ?: continue
-                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "startActivitySafely", object : XC_MethodHook() {
+                    ModuleHooks.hookAllMethods(cls, "startActivitySafely", object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             com.cosmod.launcherglass.util.LiveBlurEngine.onAppLaunchStarted()
                         }
@@ -249,7 +253,7 @@ class HookEntry : IXposedHookLoadPackage {
             }
 
             try {
-                XposedHelpers.findAndHookMethod(
+                ModuleHooks.findAndHookMethod(
                     "com.android.launcher3.dragndrop.DragInterfaceManager",
                     lpparam.classLoader,
                     "notifyEditStateChanged",
@@ -290,9 +294,9 @@ class HookEntry : IXposedHookLoadPackage {
                             com.cosmod.launcherglass.util.LiveBlurEngine.onDrawerTargetChanged(state === allApps)
                         }
                     }
-                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "setState", stateHook)
-                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "setStateWithAnimation", stateHook)
-                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "setProgress", object : XC_MethodHook() {
+                    ModuleHooks.hookAllMethods(cls, "setState", stateHook)
+                    ModuleHooks.hookAllMethods(cls, "setStateWithAnimation", stateHook)
+                    ModuleHooks.hookAllMethods(cls, "setProgress", object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             val progress = param.args.firstOrNull() as? Float ?: return
                             com.cosmod.launcherglass.util.LiveBlurEngine.onDrawerProgress(progress)
@@ -313,7 +317,7 @@ class HookEntry : IXposedHookLoadPackage {
                         method.parameterTypes.isNotEmpty() && method.parameterTypes[0] == android.graphics.Bitmap::class.java
                     }
                     if (deliveryMethod != null) {
-                        de.robv.android.xposed.XposedBridge.hookMethod(deliveryMethod, object : XC_MethodHook() {
+                        ModuleHooks.hookMethod(deliveryMethod, object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
                                 val bitmap = param.args.firstOrNull() as? android.graphics.Bitmap ?: return
                                 com.cosmod.launcherglass.util.WallpaperHelper.onLauncherWallpaper(bitmap)
@@ -323,7 +327,7 @@ class HookEntry : IXposedHookLoadPackage {
                     } else {
                         for (name in listOf("u", "s")) {
                             try {
-                                de.robv.android.xposed.XposedBridge.hookAllMethods(wallpaperClass, name, object : XC_MethodHook() {
+                                ModuleHooks.hookAllMethods(wallpaperClass, name, object : XC_MethodHook() {
                                     override fun beforeHookedMethod(param: MethodHookParam) {
                                         val bitmap = param.args.firstOrNull() as? android.graphics.Bitmap ?: return
                                         com.cosmod.launcherglass.util.WallpaperHelper.onLauncherWallpaper(bitmap)
@@ -348,6 +352,7 @@ class HookEntry : IXposedHookLoadPackage {
                     var needsReload = false
                     val handler = android.os.Handler(android.os.Looper.getMainLooper())
                     val reset = Runnable {
+                        if(!PrefsHelper.enabled)return@Runnable
                         GlassLogger.i("HookEntry", "Icon pack/style changed -> reset glass caches and frame scheduler")
                         IconGlassHook.appContext?.let { PrefsHelper.loadPrefs(it) }
                         IconGlassHook.onIconThemeChanged()
@@ -387,7 +392,7 @@ class HookEntry : IXposedHookLoadPackage {
                         }
                     }
                     for (method in listOf("update", "updateIconConfigIfNecessary", "updateSettingConfig")) {
-                        de.robv.android.xposed.XposedBridge.hookAllMethods(config, method, changed)
+                        ModuleHooks.hookAllMethods(config, method, changed)
                     }
                 }
             } catch (t: Throwable) {

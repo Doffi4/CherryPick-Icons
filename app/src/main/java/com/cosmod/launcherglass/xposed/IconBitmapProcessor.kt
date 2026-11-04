@@ -18,7 +18,9 @@ object IconBitmapProcessor {
         var palette: com.cosmod.launcherglass.util.IconPalette? = null, var colored: ProcessedIcon? = null)
     private val cache = WeakHashMap<Bitmap, CachedIcon>()
     private val layeredSources=WeakHashMap<Bitmap,Boolean>()
-    @Synchronized fun markLayeredSource(bitmap:Bitmap){layeredSources[bitmap]=true}
+    @Synchronized fun markLayeredSource(bitmap:Bitmap){
+        if(layeredSources.put(bitmap,true)!=true)cache.remove(bitmap)
+    }
     @Synchronized fun clearTintCache() { cache.values.forEach { it.palette = null; it.colored = null } }
     private fun applyPalette(cached: CachedIcon): ProcessedIcon? {
         val icon = cached.icon ?: return null
@@ -41,6 +43,12 @@ object IconBitmapProcessor {
         clearTintCache()
         com.cosmod.launcherglass.util.GlyphShadowHelper.clearCache()
         cachedOpacity = -1
+    }
+
+    @Synchronized
+    fun nativeLayers(src: Bitmap, bgOpacity: Int): ProcessedIcon? {
+        getOrProcess(src, bgOpacity)
+        return cache[src]?.icon
     }
 
     @Synchronized

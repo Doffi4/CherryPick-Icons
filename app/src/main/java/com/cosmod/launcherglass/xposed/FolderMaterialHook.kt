@@ -25,6 +25,9 @@ internal object FolderMaterialHook {
     private var geometryRevision=0L
     fun invalidateGeometry(){geometryRevision++;nativeShapes.evictAll()}
     private fun enabled()=PrefsHelper.enabled && PrefsHelper.blurEnabled && PrefsHelper.folderBlurEnabled
+    private fun shortcut(view:View?)=view?.javaClass?.name=="com.android.launcher3.viewcontainer.ShortcutContainer"
+    private fun enabled(view:View?)=PrefsHelper.enabled && PrefsHelper.blurEnabled && (shortcut(view) || PrefsHelper.folderBlurEnabled)
+    private fun style(view:View)=if(shortcut(view))GlassStyle.icons().copy(extendedLens=true)else FolderSettings.style()
     private fun field(owner:Any,name:String):Any?=try {XposedHelpers.getObjectField(owner,name)}catch(_:Throwable){null}
     private fun nativePath(view:View,bounds:Rect,radius:Float,info:Any?,sx:Int,sy:Int):Path?=try {
         val loader=view.context.classLoader
@@ -65,7 +68,7 @@ internal object FolderMaterialHook {
         private var pathFingerprint=0
         override fun draw(canvas:Canvas){
             val view=(callback as? View) ?: source.get() ?: return
-            if(!enabled()) {fallback?.bounds=bounds;fallback?.draw(canvas);return}
+            if(!enabled(source.get())) {fallback?.bounds=bounds;fallback?.draw(canvas);return}
             val native=owner?.get()
             val old=fallback?.bounds?.let(::Rect)
             val outline=Outline()
@@ -93,7 +96,7 @@ internal object FolderMaterialHook {
             pathFingerprint=path.approximate(1f).contentHashCode()
             }
             if(!logged){logged=true;GlassLogger.i("FolderMaterial","Native shape: radius=$radius, path=${!path.isEmpty}, bounds=$bounds, callback=${callback?.javaClass?.simpleName}")}
-            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=FolderSettings.style(),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint)){
+            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint)){
                 fallback?.bounds=bounds;fallback?.draw(canvas)
             }
         }
@@ -117,13 +120,21 @@ internal object FolderMaterialHook {
         GlassLogger.i("FolderMaterial","Custom plate installed; native controller retired=${controller!=null}")
         return true
     }
+    fun attachShortcut(view:View){
+        if(!enabled(view))return
+        val background=NativeIconAccess.field(view,"previewBackground") ?: NativeIconAccess.call(view,"getPreviewBackground") ?: return
+        if(field(background,"mBgDrawable") is Material)return
+        val activity=NativeIconAccess.call(view,"getLauncher") ?: return
+        backgrounds[background]=State(WeakReference(view.context),WeakReference(view),WeakReference(activity))
+        if(replace(background,view))XposedHelpers.callMethod(background,"setBackground",view)
+    }
     fun onSettingsChanged(){
         if(Looper.myLooper()!=Looper.getMainLooper()){main.post {onSettingsChanged()};return}
         invalidateGeometry()
         for((background,state) in backgrounds.strongSnapshot()){
             val view=state.view.get() ?: continue
             val custom=field(background,"mBgDrawable") is Material
-            if(custom==enabled())continue
+            if(custom==enabled(view))continue
             try {
                 val context=state.context.get() ?: continue
                 val activity=state.activity.get() ?: continue
@@ -141,12 +152,12 @@ internal object FolderMaterialHook {
     fun install(loader:ClassLoader){
         val type=XposedHelpers.findClassIfExists("com.android.launcher3.folder.OplusPreviewBackground",loader) ?: return
         XposedHelpers.findClassIfExists("com.android.launcher3.folder.FolderRoundImageView",loader)?.let {image ->
-            XposedBridge.hookAllMethods(image,"onDraw",object:XC_MethodHook(){
+            ModuleHooks.hookAllMethods(image,"onDraw",object:XC_MethodHook(){
                 override fun beforeHookedMethod(param:MethodHookParam){
                     val view=param.thisObject as? ImageView ?: return
                     val material=view.drawable as? Material ?: return
                     val canvas=param.args.firstOrNull() as? Canvas ?: return
-                    if(!enabled())return
+                    if(!enabled(material.source.get()))return
                     // The non-blur ImageView branch would clip our exact native
                     // contour a second time using the older fallback shape.
                     material.setBounds(0,0,view.width,view.height)
@@ -160,10 +171,11 @@ internal object FolderMaterialHook {
                 }
             })
         }
-        XposedBridge.hookAllMethods(type,"drawBackground",object:XC_MethodHook(){
+        ModuleHooks.hookAllMethods(type,"drawBackground",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
-                if(!enabled() || param.args.size<2)return
+                if(param.args.size<2)return
                 val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
+                if(!enabled(material.source.get()))return
                 val canvas=param.args.firstOrNull() as? Canvas ?: return
                 val params=param.args.getOrNull(1) ?: return
                 val view=field(param.thisObject,"mInvalidateDelegate") as? View ?: return
@@ -178,14 +190,14 @@ internal object FolderMaterialHook {
                     val path=nativePath(view,bounds,radius,info,sx,sy) ?: Path()
                     val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",loader)
                     if(path.isEmpty)XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",path,RectF(bounds),radius,radius,sx,sy)
-                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path,alpha=material.alpha,style=FolderSettings.style())){
+                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path,alpha=material.alpha,style=style(view))){
                         if(converted.put(param.thisObject,true)==null)GlassLogger.i("FolderMaterial","Native hover/resize material: bounds=$bounds, radius=$radius")
                         param.result=null
                     }
                 }catch(t:Throwable){GlassLogger.e("FolderMaterial","Converted native material failed",t)}
             }
         })
-        XposedBridge.hookAllMethods(type,"initBgDrawable",object:XC_MethodHook(){
+        ModuleHooks.hookAllMethods(type,"initBgDrawable",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
                 val context=param.args.getOrNull(0) as? Context ?: return
                 val view=param.args.getOrNull(1) as? View ?: return
@@ -193,8 +205,9 @@ internal object FolderMaterialHook {
                 backgrounds[param.thisObject]=State(WeakReference(context),WeakReference(view),WeakReference(activity))
             }
             override fun afterHookedMethod(param:MethodHookParam){
-                if(!enabled() || param.hasThrowable())return
+                if(param.hasThrowable())return
                 val view=param.args.getOrNull(1) as? View ?: return
+                if(!enabled(view))return
                 try {
                     if(field(param.thisObject,"mBgDrawable") !is Material){
                         replace(param.thisObject,view)
@@ -203,16 +216,16 @@ internal object FolderMaterialHook {
                 }catch(t:Throwable){GlassLogger.e("FolderMaterial","Folder attachment failed",t)}
             }
         })
-        XposedBridge.hookAllMethods(type,"initBlurDrawable",object:XC_MethodHook(){
+        ModuleHooks.hookAllMethods(type,"initBlurDrawable",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
-                if(!enabled())return
                 val view=param.args.getOrNull(1) as? View ?: return
+                if(!enabled(view))return
                 try {if(replace(param.thisObject,view))param.result=null}
                 catch(t:Throwable){GlassLogger.e("FolderMaterial","Native producer retirement failed",t)}
             }
         })
         val folder=XposedHelpers.findClassIfExists("com.android.launcher3.folder.OplusFolder",loader)
-        if(folder!=null)XposedBridge.hookAllMethods(folder,"onFinishInflate",object:XC_MethodHook(){
+        if(folder!=null)ModuleHooks.hookAllMethods(folder,"onFinishInflate",object:XC_MethodHook(){
             override fun afterHookedMethod(param:MethodHookParam){
                 for(name in listOf("mContentBackground","mContentAnimationBackground")){
                     val view=field(param.thisObject,name) as? ImageView ?: continue

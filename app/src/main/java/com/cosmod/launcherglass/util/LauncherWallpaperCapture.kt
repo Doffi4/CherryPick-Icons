@@ -162,7 +162,7 @@ object LauncherWallpaperCapture {
     }
 
     fun setWindow(view: View) {
-        if(window?.get()!==view) {
+        if(window?.get()!==view || focusListener==null) {
             window?.get()?.viewTreeObserver?.takeIf {it.isAlive}?.let {old -> focusListener?.let {old.removeOnWindowFocusChangeListener(it)} }
             val weak=WeakReference(view)
             focusListener=android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
@@ -174,6 +174,12 @@ object LauncherWallpaperCapture {
         if(awaitingUnlock)staticMotionUntilMs=SystemClock.uptimeMillis()+1800L
         startMotionWatch()
     }
+    fun onModuleDisabled(){
+        stopMotionWatch()
+        window?.get()?.viewTreeObserver?.takeIf {it.isAlive}?.let {observer -> focusListener?.let {observer.removeOnWindowFocusChangeListener(it)}}
+        focusListener=null
+    }
+    fun onModuleEnabled(){if(focusListener==null)window?.get()?.let {setWindow(it)}}
 
     private fun isReadySurface(surface: Any, context: Context): Boolean {
         if (XposedHelpers.callMethod(surface, "isValid") != true) return false

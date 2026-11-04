@@ -13,7 +13,13 @@ import java.util.WeakHashMap
 internal object PhotoWidgetMaterial {
     private val identities=WeakHashMap<View,ColorDrawable>()
     private val hosts=WeakHashMap<View,Boolean>()
-    fun onSettingsChanged(){hosts.keys.weakSnapshot().forEach {it.invalidate()}}
+    fun onSettingsChanged(){
+        hosts.keys.weakSnapshot().forEach {it.invalidate()}
+        if(!PrefsHelper.enabled || !PrefsHelper.blurEnabled || !PrefsHelper.photoWidgetBlur){
+            for((root,listener) in roots.strongSnapshot())if(root.viewTreeObserver.isAlive)root.viewTreeObserver.removeOnPreDrawListener(listener)
+            roots.clear();stamps.clear()
+        }
+    }
     private val logged=HashSet<String>()
     private val drawMethods=HashSet<java.lang.reflect.Method>()
     private val drawing=ThreadLocal<MutableSet<View>>()
@@ -46,7 +52,7 @@ internal object PhotoWidgetMaterial {
         val weak=java.lang.ref.WeakReference(root)
         val listener=android.view.ViewTreeObserver.OnPreDrawListener {
             val current=weak.get()
-            if(current!=null && PrefsHelper.photoWidgetBlur)for(host in hosts.keys.weakSnapshot()){
+            if(current!=null && PrefsHelper.enabled && PrefsHelper.photoWidgetBlur)for(host in hosts.keys.weakSnapshot()){
                 if(host.rootView!==current || !host.isShown)continue
                 val child=content(host)
                 val values=FloatArray(9);transform(host,child).getValues(values)
@@ -166,7 +172,7 @@ internal object PhotoWidgetMaterial {
                 while(cls!=null){
                     val method=cls.declaredMethods.firstOrNull {it.name=="dispatchDraw" && it.parameterTypes.contentEquals(arrayOf(Canvas::class.java))}
                     if(method!=null){
-                        if(drawMethods.add(method))XposedBridge.hookMethod(method,contentHook)
+                        if(drawMethods.add(method))ModuleHooks.hookMethod(method,contentHook)
                         break
                     }
                     cls=cls.superclass

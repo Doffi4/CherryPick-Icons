@@ -104,4 +104,14 @@
     <string name="ui_haze_test">Дымка iOS · тест</string>
     <string name="ui_haze_hint">Пробное приближение: сниженный контраст и широкая светлая вуаль на стекле. Радиус размытия работает как обычно, включая 0. Логотип и контур сохраняются. Работает независимо от глубины цвета.</string>
     <string name="ui_photo_widget_tint_hint">Выключено — исходные цвета фото. Включено — цвет иконок.</string>
+    <string name="ui_presets">Наборы настроек</string>
+    <string name="ui_gpu_effects">Эффекты на GPU</string>
+    <string name="ui_gpu_effects_hint">Включено — GPU. Выключено — CPU. Влияет на размытие, преломление и оформление материалов. Без режима разработчика используется GPU.</string>
+    <string name="ui_presets_hint">Сохраните настройки в JSON-файл, чтобы поделиться ими. Импорт заменяет настройки модуля; язык и статус устройства сохраняются.</string>
+    <string name="ui_export_settings">Экспорт настроек</string>
+    <string name="ui_import_settings">Импорт настроек</string>
+    <string name="ui_settings_imported">Настройки импортированы</string>
+    <string name="ui_settings_exported">Настройки экспортированы</string>
+    <string name="ui_settings_transfer_error">Не удалось перенести настройки: %1$s</string>
+    <string name="ui_file_picker_error">Не найдено приложение для выбора файлов</string>
 </resources>

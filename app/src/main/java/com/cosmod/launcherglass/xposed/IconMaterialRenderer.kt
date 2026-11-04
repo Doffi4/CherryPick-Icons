@@ -43,6 +43,17 @@ object IconMaterialRenderer {
     private val cache = object : LruCache<Key, Material>(24 * 1024 * 1024) {
         override fun sizeOf(key: Key, value: Material) = value.overlay.allocationByteCount + (value.foreground?.allocationByteCount ?: 0) + 512
     }
+    private class CpuFrame {
+        var bitmap:Bitmap?=null
+        var wallpaper:Bitmap?=null
+        var source:RectF?=null
+        var style:GlassStyle?=null
+        var finish=-1
+        val clock=SampleFrameClock()
+    }
+    private val cpuFrames=object:LruCache<Key,CpuFrame>(16*1024*1024){
+        override fun sizeOf(key:Key,value:CpuFrame)=(value.bitmap?.allocationByteCount ?: key.width*key.height*4)+128
+    }
     data class Binding(val view:View,val drawable:Drawable,val local:RectF,val screenW:Int,val screenH:Int,val mini:Boolean=false)
     private class Sampler(val node:RenderNode,val material:Material,var local:RectF,val screenW:Int,val screenH:Int,var style:GlassStyle){
         val world=Matrix()
@@ -118,6 +129,7 @@ object IconMaterialRenderer {
     }
 
     @Synchronized fun clear() {
+        cpuFrames.evictAll();CpuLiquidGlass.clear()
         pendingFrames.values.forEach {mainHandler.removeCallbacks(it)}
         pendingFrames.clear();cache.evictAll();samplers.clear()
     }
@@ -208,6 +220,31 @@ object IconMaterialRenderer {
             if (PrefsHelper.glyphStroke) PrefsHelper.glyphStrokeOpacity else 0,
             if (PrefsHelper.glyphStroke) PrefsHelper.glyphStrokeWidth else 0,
             if (PrefsHelper.glyphStroke) PrefsHelper.glyphStrokeBrightness else 0,PrefsHelper.colorDepthBits,PrefsHelper.colorDepthStage)
+        if(!PrefsHelper.gpuEffects && canvas.isHardwareAccelerated){
+            var frame=cpuFrames.get(key)
+            if(frame==null){frame=CpuFrame();cpuFrames.put(key,frame)}
+            var footprint=source
+            if(binding!=null && wallpaper!=null){
+                val world=Matrix()
+                try {
+                    XposedHelpers.callMethod(binding.view,"transformMatrixToGlobal",world)
+                    val rect=RectF(binding.local);world.mapRect(rect)
+                    footprint=WallpaperFootprint.source(wallpaper,binding.screenW,binding.screenH,rect)
+                }catch(_:Throwable){}
+            }
+            val changed=frame.bitmap==null || frame.wallpaper!==wallpaper || frame.source!=footprint || frame.style!=style || frame.finish!=MaterialFinish.key()
+            val now=System.nanoTime()
+            val fps=MiniIconRefresh.fps(PrefsHelper.liveFps,binding?.mini==true,PrefsHelper.optimizeMiniIcons)
+            val remaining=frame.clock.remainingNs(now,fps)
+            if(changed && (frame.bitmap==null || remaining==0L)){
+                val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+                val software=wallpaper?.let {com.cosmod.launcherglass.util.WallpaperHelper.forCanvas(it,Canvas(bitmap))}
+                draw(Canvas(bitmap),Rect(0,0,width,height),mask,glyph,color,tintAlpha,hideGlyph,software,footprint,null,volume,style,buildOverlay)
+                frame.bitmap=bitmap;frame.wallpaper=wallpaper;frame.source=footprint?.let(::RectF);frame.style=style;frame.finish=MaterialFinish.key();frame.clock.record(now,fps)
+            }else if(changed)scheduleSampleRefresh(binding?.view,remaining)
+            frame.bitmap?.let {canvas.drawBitmap(it,null,bounds,outputPaint)}
+            return
+        }
         var material = cache.get(key)
         if (material == null) {
             val overlay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -281,13 +318,15 @@ object IconMaterialRenderer {
                     val hardware=canvas.isHardwareAccelerated
                     val changed=material.wallpaper!==wallpaper || material.source!=source || material.appliedStyle!=style || material.appliedHardware!=hardware
                     if(changed && (material.paint.shader==null || material.appliedStyle!=style || material.appliedHardware!=hardware || material.clock.remainingNs(nowNs,fps)==0L)){
-                    val refracted=if(android.os.Build.VERSION.SDK_INT>=33 && style.liquid && canvas.isHardwareAccelerated){
+                    val refracted=if(style.liquid && !canvas.isHardwareAccelerated){
+                        CpuLiquidGlass.shader(wallpaper,mask,width,height,source,material.rounding,style)
+                    }else if(android.os.Build.VERSION.SDK_INT>=33 && style.liquid && canvas.isHardwareAccelerated){
                         val lens=material.liquid ?: LiquidGlassShader.create().also {material.liquid=it}
                         lens?.update(wallpaper,material.mask!!,source,width,height,style.filter,material.rounding,style)
                     }else null
                     if(refracted!=null){
                         material.paint.shader=refracted
-                        material.paint.colorFilter=null
+                        material.paint.colorFilter=if(canvas.isHardwareAccelerated)null else style.filter
                     }else{
                         if (material.wallpaperShaderImage !== wallpaper) {
                             material.wallpaperShaderImage = wallpaper

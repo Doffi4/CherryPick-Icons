@@ -40,6 +40,7 @@ class SettingsProvider : ContentProvider() {
                 }
             }
             METHOD_GET_ALL -> {
+                bundle.putBoolean(KEY_GPU_EFFECTS,prefs.getBoolean(KEY_GPU_EFFECTS,true))
                 bundle.putBoolean(FolderSettingsKeys.OWN,prefs.getBoolean(FolderSettingsKeys.OWN,false))
                 for(base in FolderSettingsKeys.integers){
                     val key=FolderSettingsKeys.key(base)
@@ -111,6 +112,7 @@ class SettingsProvider : ContentProvider() {
                 enforceCaller()
                 extras?.let { b ->
                     val editor = prefs.edit()
+                    if(b.containsKey(KEY_GPU_EFFECTS))editor.putBoolean(KEY_GPU_EFFECTS,b.getBoolean(KEY_GPU_EFFECTS))
                     if(b.containsKey(FolderSettingsKeys.OWN))editor.putBoolean(FolderSettingsKeys.OWN,b.getBoolean(FolderSettingsKeys.OWN))
                     for(base in FolderSettingsKeys.integers){val key=FolderSettingsKeys.key(base);if(b.containsKey(key))editor.putInt(key,b.getInt(key))}
                     for(base in FolderSettingsKeys.booleans){val key=FolderSettingsKeys.key(base);if(b.containsKey(key))editor.putBoolean(key,b.getBoolean(key))}
@@ -220,6 +222,7 @@ class SettingsProvider : ContentProvider() {
 
         const val KEY_ENABLED = "enabled"
         const val KEY_DEVELOPER_MODE = "developer_mode"
+        const val KEY_GPU_EFFECTS = "gpu_effects"
         const val KEY_BLUR_TONE_ENABLED = "blur_tone_enabled"
         const val KEY_PHOTO_WIDGET_BLUR = "photo_widget_blur"
         const val KEY_COLOR_DEPTH_ENABLED = "blur_color_depth_enabled"
