@@ -40,7 +40,7 @@ internal object FolderSettings {
         val liquid=number(SettingsProvider.KEY_BLUR_STYLE,1)==1 && Build.VERSION.SDK_INT>=33
         val vibrancy=if(tone)number(SettingsProvider.KEY_BLUR_VIBRANCY,200)else 0
         processing=Processing(radius,quality,vibrancy,if(tone)number(SettingsProvider.KEY_BLUR_LIGHTENING,100)else 50,liquid)
-        selected=GlassStyle(liquid,if(developer)number(SettingsProvider.KEY_LIQUID_WIDTH,100)else 40,
+        selected=GlassStyle(liquid,number(SettingsProvider.KEY_LIQUID_WIDTH,100),
             number(SettingsProvider.KEY_LIQUID_DISTORTION,300),radius,if(tone)number(SettingsProvider.KEY_BG_OPACITY,100)else 0,
             PrefsHelper.backdropFilter(vibrancy,PrefsHelper.iconPalette),true,
             PrefsHelper.plateColor(PrefsHelper.iconPalette.background,if(tone)number(SettingsProvider.KEY_BLUR_SATURATION,200)else 100))

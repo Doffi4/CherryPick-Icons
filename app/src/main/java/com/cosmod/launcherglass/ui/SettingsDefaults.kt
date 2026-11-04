@@ -3,6 +3,8 @@ package com.cosmod.launcherglass.ui
 /** Defaults for absent keys only. Existing installations retain their saved values. */
 object SettingsDefaults {
     fun initialize(context: android.content.Context, prefs: android.content.SharedPreferences) {
+        // Capture this before migrations populate an otherwise fresh preference file.
+        val hadSavedValues = prefs.all.isNotEmpty()
         val removed=listOf("refraction_before_blur","folder_refraction_before_blur","photo_widget_refraction_before_blur")
         if(removed.any(prefs::contains))prefs.edit().apply {removed.forEach {remove(it)}}.apply()
         if(prefs.contains("blur_dither") || prefs.contains("blur_dither_strength"))prefs.edit().apply {
@@ -12,16 +14,16 @@ object SettingsDefaults {
         initializePhoto(prefs)
         if (prefs.getInt("defaults_revision", 0) >= 38) { initializeColors(prefs); initializeTone(prefs); return }
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        val upgrade = info.firstInstallTime != info.lastUpdateTime || prefs.all.isNotEmpty()
+        val upgrade = info.firstInstallTime != info.lastUpdateTime || hadSavedValues
         val editor = prefs.edit()
         if (upgrade) {
-            // Freeze the old defaults for previously absent keys, too. An
-            // update must not change an untouched setting on an existing install.
+            // Preserve legacy appearance defaults for absent keys. A missing blur
+            // mode uses Live; explicitly saved choices are never overwritten.
             val oldBooleans = booleans + mapOf(SettingsProvider.KEY_ENABLED to true,
                 SettingsProvider.KEY_FOLDER_BLUR_ENABLED to true,
                 SettingsProvider.KEY_DRAWER_BLUR_ENABLED to true)
             val oldIntegers = mapOf(SettingsProvider.KEY_BG_OPACITY to 35,
-                SettingsProvider.KEY_BLUR_RADIUS to 25, SettingsProvider.KEY_BLUR_MODE to 0,
+                SettingsProvider.KEY_BLUR_RADIUS to 25, SettingsProvider.KEY_BLUR_MODE to SettingsProvider.BLUR_MODE_LIVE,
                 SettingsProvider.KEY_LIVE_FPS to 30, SettingsProvider.KEY_STROKE_OPACITY to 70,
                 SettingsProvider.KEY_SHADOW_OPACITY to 60, SettingsProvider.KEY_GRADIENT_OPACITY to 60)
             oldBooleans.forEach { (key, value) -> if (!prefs.contains(key)) editor.putBoolean(key, value) }

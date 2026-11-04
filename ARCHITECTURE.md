@@ -1,4 +1,9 @@
-# CherryPick Icons 0.2.33
+# CherryPick Icons 0.2.34
+
+First beta release:
+
+- Fresh-install detection now runs before photo defaults populate preferences. New installations and absent blur-mode keys use Live; explicitly saved modes remain respected.
+- Refraction edge width is visible and applied without developer mode for icons, independent folders and photos. Saved width values and reset defaults remain unchanged.
 
 Release preparation:
 

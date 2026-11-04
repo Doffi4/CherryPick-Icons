@@ -372,7 +372,7 @@ class MainActivity : AppCompatActivity() {
             gate(tint){master() && blur() && bool(SettingsProvider.KEY_PHOTO_WIDGET_BLUR)}
             add(details,tint)
             val liquid=column()
-            if(bool(SettingsProvider.KEY_DEVELOPER_MODE))add(liquid,slider(getString(R.string.ui_liquid_width),SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH,0,100,"%"))
+            add(liquid,slider(getString(R.string.ui_liquid_width),SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH,0,100,"%"))
             add(liquid,slider(getString(R.string.ui_liquid_distortion),SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_DISTORTION,0,300,"%"))
             gate(liquid){blur() && bool(SettingsProvider.KEY_PHOTO_WIDGET_BLUR) && number(SettingsProvider.KEY_BLUR_STYLE)==1}
             liquid.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE
@@ -442,7 +442,7 @@ class MainActivity : AppCompatActivity() {
         refreshers.add {refresh()}
         add(parent,group,bottom=8)
         val parameters=column()
-        if(bool(SettingsProvider.KEY_DEVELOPER_MODE))add(parameters,slider(getString(R.string.ui_liquid_width),FolderSettingsKeys.key(SettingsProvider.KEY_LIQUID_WIDTH),0,100,"%"))
+        add(parameters,slider(getString(R.string.ui_liquid_width),FolderSettingsKeys.key(SettingsProvider.KEY_LIQUID_WIDTH),0,100,"%"))
         add(parameters,slider(getString(R.string.ui_liquid_distortion),FolderSettingsKeys.key(SettingsProvider.KEY_LIQUID_DISTORTION),0,300,"%"))
         parameters.visibility=if(number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1)View.VISIBLE else View.GONE
         refreshers.add {parameters.visibility=if(number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1)View.VISIBLE else View.GONE}
@@ -478,7 +478,7 @@ class MainActivity : AppCompatActivity() {
         refreshers.add {refresh()}
         add(parent,group,bottom=8)
         val parameters=column()
-        if(bool(SettingsProvider.KEY_DEVELOPER_MODE))add(parameters,slider(getString(R.string.ui_liquid_width),SettingsProvider.KEY_LIQUID_WIDTH,0,100,"%"))
+        add(parameters,slider(getString(R.string.ui_liquid_width),SettingsProvider.KEY_LIQUID_WIDTH,0,100,"%"))
         add(parameters,slider(getString(R.string.ui_liquid_distortion),SettingsProvider.KEY_LIQUID_DISTORTION,0,300,"%"))
         parameters.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE
         refreshers.add {parameters.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE}
