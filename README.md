@@ -4,34 +4,30 @@
 
 ## Русский
 
-Модуль LSPosed со стеклянными иконками для системного лаунчера ColorOS / OxygenOS.
-Текущая версия: **0.2.33**.
+Модуль LSPosed, добавляющий стеклянное оформление для лаунчера ColorOS/OxygenOS/RUI
 
 > **Бета-тестирование.** Модуль тестировался только на **ColorOS 17**.
-> На **ColorOS 16** могут встречаться проблемы совместимости.
+> На других прошивках могут быть проблемы совместимости.
 
 ### Как создавался проект
 
-Проект был полностью навайбкоден с помощью **GPT 6.1 Sol**.
-Участие автора проекта — воплощение идеи, создание логики работы и интерфейса.
+Проект был полностью навайбкожен с помощью **GPT 6.1 Sol**.
+Участие автора проекта - воплощение идеи, создание логики работы и интерфейса.
 
 ### Возможности
 
-- Матовые подложки Frosted и преломление Liquid Glass с сохранением системной формы Flux.
-- Живое и статичное размытие обоев, общий лимит обновлений материала до 60 FPS.
-- Отдельные настройки подложек папок, миниатюр и фото-виджетов.
-- Настройки цвета, прозрачности, контура и объёма, русский и английский интерфейс.
-- Экспорт диагностики через системное меню «Поделиться» и перезапуск лаунчера с root.
+\- Матовые подложки Frosted и преломление Liquid Glass с сохранением системной формы Flux.<br>
+\- Живое и статичное размытие обоев, общий лимит обновлений материала до 60 FPS.<br>
+\- Отдельные настройки подложек папок, миниатюр и фото-виджетов.<br>
+\- Настройки цвета, прозрачности, контура и объёма, русский и английский интерфейс.
 
 ### Совместимость и установка
 
-Нужны root, LSPosed и системный лаунчер с выбранным стилем иконок **Flux**.
-Минимальная версия Android в сборке — 12; Liquid Glass требует Android 13 или новее.
-Поведение зависит от версии лаунчера и прошивки. На устройствах модуль тестировался
-только на **ColorOS 17**, в том числе с System Launcher 17.3.9. Анализ APK лаунчера
-16.x не заменяет тестирование на ColorOS 16: на этой версии возможны проблемы совместимости.
+Приложению выдать рут доступ, LSPosed и выбрать в нём системный лаунчер, оформление иконок сменить на Flux, другие икон паки не поддерживаются на данный момент.
 
-1. Установите APK и включите CherryPick Icons в LSPosed.
+На данный момент поддерживается ColorOS17/OxygenOS17/RUI7, 16 версия почти не тестировалась, при разных версиях прошивки и системного лаунчера поведение может быть непредсказуемым.
+
+1. Установите APK, выдайте рут и включите CherryPick Icons в LSPosed.
 2. В области действия выберите установленный системный лаунчер и CherryPick Icons.
 3. Выберите Flux в системных настройках иконок.
 4. Откройте модуль, настройте эффекты и перезапустите лаунчер.
@@ -62,17 +58,17 @@ APK появится в `app/build/outputs/apk/release/app-release.apk`.
 
 ### Исходники
 
-- `app/src/main/java/com/cosmod/launcherglass/ui` — настройки и обмен с лаунчером.
-- `app/src/main/java/com/cosmod/launcherglass/xposed` — хуки и материалы иконок, папок и фото.
-- `app/src/main/java/com/cosmod/launcherglass/util` — получение и обработка обоев, диагностика.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — устройство рендера и история изменений.
+\- `app/src/main/java/com/cosmod/launcherglass/ui` - настройки и обмен с лаунчером.<br>
+\- `app/src/main/java/com/cosmod/launcherglass/xposed` - хуки и материалы иконок, папок и фото.<br>
+\- `app/src/main/java/com/cosmod/launcherglass/util` - получение и обработка обоев, диагностика.<br>
+\- [ARCHITECTURE.md](ARCHITECTURE.md) - устройство рендера и история изменений.
 
 Исторические ссылки `../scratch/...` в архитектурных заметках относятся к локальным
 проверкам разработчика и не входят в публичные исходники.
 
 ### Благодарности и лицензия
 
-[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) — Mahmud0808.
+[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) - Mahmud0808.
 Спасибо [@anime_killer2009](https://t.me/anime_killer2009) за помощь.
 Подробности заимствований: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 Лицензия: [GNU GPL v3](COPYING).
@@ -83,11 +79,10 @@ APK появится в `app/build/outputs/apk/release/app-release.apk`.
 
 ## English
 
-An LSPosed module that adds glass icon materials to the ColorOS / OxygenOS system launcher.
-Current version: **0.2.33**.
+An LSPosed module that adds a glass appearance to the ColorOS/OxygenOS/RUI launcher.
 
 > **Beta testing.** The module has only been tested on **ColorOS 17**.
-> **ColorOS 16** may have compatibility issues.
+> Other firmware versions may have compatibility issues.
 
 ### How this project was made
 
@@ -97,21 +92,18 @@ and creating the interface.
 
 ### Features
 
-- Frosted backgrounds and Liquid Glass refraction that preserve the native Flux icon shape.
-- Live and static wallpaper blur, with a shared material update limit of up to 60 FPS.
-- Separate settings for folder plates, miniature icons, and photo widgets.
-- Color, opacity, contour, and depth controls; Russian and English interfaces.
-- Diagnostics shared through the Android chooser and a launcher restart action using root.
+\- Frosted backgrounds and Liquid Glass refraction that preserve the native Flux icon shape.<br>
+\- Live and static wallpaper blur, with a shared material update limit of up to 60 FPS.<br>
+\- Separate settings for folder plates, miniature icons, and photo widgets.<br>
+\- Color, opacity, contour, and depth controls; Russian and English interfaces.
 
 ### Compatibility and installation
 
-Root, LSPosed, and a system launcher with the **Flux** icon style are required.
-The minimum Android version is 12; Liquid Glass requires Android 13 or later.
-Behavior depends on the launcher and firmware versions. Device testing has only been
-performed on **ColorOS 17**, including System Launcher 17.3.9. Analysis of launcher 16.x
-APKs is not a substitute for testing on ColorOS 16; compatibility issues may occur.
+Grant the app root access, enable the module in LSPosed and select the system launcher in its scope. Switch the icon style to Flux; other icon packs are currently unsupported.
 
-1. Install the APK and enable CherryPick Icons in LSPosed.
+Currently supports ColorOS17/OxygenOS17/RUI7. Version 16 has barely been tested; behavior may be unpredictable across firmware and system launcher versions.
+
+1. Install the APK, grant root access and enable CherryPick Icons in LSPosed.
 2. Select the installed system launcher and CherryPick Icons in the module scope.
 3. Select Flux in the system icon settings.
 4. Open the module, adjust the effects, and restart the launcher.
@@ -142,17 +134,17 @@ Updating an installed APK requires the same signing certificate.
 
 ### Source layout
 
-- `app/src/main/java/com/cosmod/launcherglass/ui` — settings and launcher communication.
-- `app/src/main/java/com/cosmod/launcherglass/xposed` — hooks and icon, folder, and photo materials.
-- `app/src/main/java/com/cosmod/launcherglass/util` — wallpaper capture and processing, diagnostics.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — rendering architecture and change history.
+\- `app/src/main/java/com/cosmod/launcherglass/ui` - settings and launcher communication.<br>
+\- `app/src/main/java/com/cosmod/launcherglass/xposed` - hooks and icon, folder, and photo materials.<br>
+\- `app/src/main/java/com/cosmod/launcherglass/util` - wallpaper capture and processing, diagnostics.<br>
+\- [ARCHITECTURE.md](ARCHITECTURE.md) - rendering architecture and change history.
 
 Historical `../scratch/...` links in the architecture notes refer to local developer
 validation artifacts and are not included in the published source.
 
 ### Credits and license
 
-[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) — Mahmud0808.
+[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) - Mahmud0808.
 Thanks to [@anime_killer2009](https://t.me/anime_killer2009) for their help.
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for adaptation details.
 License: [GNU GPL v3](COPYING).
