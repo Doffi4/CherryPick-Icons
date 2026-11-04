@@ -1,0 +1,162 @@
+# CherryPick Icons
+
+[Русский](#русский) · [English](#english)
+
+## Русский
+
+Модуль LSPosed со стеклянными иконками для системного лаунчера ColorOS / OxygenOS.
+Текущая версия: **0.2.33**.
+
+> **Бета-тестирование.** Модуль тестировался только на **ColorOS 17**.
+> На **ColorOS 16** могут встречаться проблемы совместимости.
+
+### Как создавался проект
+
+Проект был полностью навайбкоден с помощью **GPT 6.1 Sol**.
+Участие автора проекта — воплощение идеи, создание логики работы и интерфейса.
+
+### Возможности
+
+- Матовые подложки Frosted и преломление Liquid Glass с сохранением системной формы Flux.
+- Живое и статичное размытие обоев, общий лимит обновлений материала до 60 FPS.
+- Отдельные настройки подложек папок, миниатюр и фото-виджетов.
+- Настройки цвета, прозрачности, контура и объёма, русский и английский интерфейс.
+- Экспорт диагностики через системное меню «Поделиться» и перезапуск лаунчера с root.
+
+### Совместимость и установка
+
+Нужны root, LSPosed и системный лаунчер с выбранным стилем иконок **Flux**.
+Минимальная версия Android в сборке — 12; Liquid Glass требует Android 13 или новее.
+Поведение зависит от версии лаунчера и прошивки. На устройствах модуль тестировался
+только на **ColorOS 17**, в том числе с System Launcher 17.3.9. Анализ APK лаунчера
+16.x не заменяет тестирование на ColorOS 16: на этой версии возможны проблемы совместимости.
+
+1. Установите APK и включите CherryPick Icons в LSPosed.
+2. В области действия выберите установленный системный лаунчер и CherryPick Icons.
+3. Выберите Flux в системных настройках иконок.
+4. Откройте модуль, настройте эффекты и перезапустите лаунчер.
+
+### Сборка
+
+Нужны JDK 17 и Android SDK с платформой API 35. Укажите путь к SDK в локальном
+`local.properties` (`sdk.dir=...`) или через `ANDROID_HOME`.
+
+```powershell
+.\gradlew.bat assembleRelease lintRelease
+```
+
+Linux / macOS:
+
+```sh
+./gradlew assembleRelease lintRelease
+```
+
+APK появится в `app/build/outputs/apk/release/app-release.apk`.
+Первой сборке нужен интернет для загрузки Gradle и зависимостей.
+
+Ключи подписи в репозиторий не входят. Если есть локальный `app/debug.keystore`,
+сборка использует его для совместимости с существующими тестовыми APK.
+Иначе Gradle создаёт обычный локальный debug-ключ. Такие сборки предназначены
+для разработки; для распространения нужно отдельно настроить постоянную подпись.
+Обновление поверх установленного APK требует того же сертификата.
+
+### Исходники
+
+- `app/src/main/java/com/cosmod/launcherglass/ui` — настройки и обмен с лаунчером.
+- `app/src/main/java/com/cosmod/launcherglass/xposed` — хуки и материалы иконок, папок и фото.
+- `app/src/main/java/com/cosmod/launcherglass/util` — получение и обработка обоев, диагностика.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — устройство рендера и история изменений.
+
+Исторические ссылки `../scratch/...` в архитектурных заметках относятся к локальным
+проверкам разработчика и не входят в публичные исходники.
+
+### Благодарности и лицензия
+
+[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) — Mahmud0808.
+Спасибо [@anime_killer2009](https://t.me/anime_killer2009) за помощь.
+Подробности заимствований: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Лицензия: [GNU GPL v3](COPYING).
+
+### Поддержать проект
+
+[Поддержать разработку через CloudTips](https://pay.cloudtips.ru/p/e6230fb4).
+
+## English
+
+An LSPosed module that adds glass icon materials to the ColorOS / OxygenOS system launcher.
+Current version: **0.2.33**.
+
+> **Beta testing.** The module has only been tested on **ColorOS 17**.
+> **ColorOS 16** may have compatibility issues.
+
+### How this project was made
+
+This project was entirely vibecoded with **GPT 6.1 Sol**.
+The project author's contribution was bringing the idea to life, defining the product logic,
+and creating the interface.
+
+### Features
+
+- Frosted backgrounds and Liquid Glass refraction that preserve the native Flux icon shape.
+- Live and static wallpaper blur, with a shared material update limit of up to 60 FPS.
+- Separate settings for folder plates, miniature icons, and photo widgets.
+- Color, opacity, contour, and depth controls; Russian and English interfaces.
+- Diagnostics shared through the Android chooser and a launcher restart action using root.
+
+### Compatibility and installation
+
+Root, LSPosed, and a system launcher with the **Flux** icon style are required.
+The build targets Android 12 or later; Liquid Glass requires Android 13 or later.
+Behavior depends on the launcher and firmware versions. Device testing has only been
+performed on **ColorOS 17**, including System Launcher 17.3.9. Analysis of launcher 16.x
+APKs is not a substitute for testing on ColorOS 16; compatibility issues may occur.
+
+1. Install the APK and enable CherryPick Icons in LSPosed.
+2. Select the installed system launcher and CherryPick Icons in the module scope.
+3. Select Flux in the system icon settings.
+4. Open the module, adjust the effects, and restart the launcher.
+
+### Building
+
+Use JDK 17 and Android SDK platform API 35. Set the SDK location in your local
+`local.properties` (`sdk.dir=...`) or through `ANDROID_HOME`.
+
+```powershell
+.\gradlew.bat assembleRelease lintRelease
+```
+
+Linux / macOS:
+
+```sh
+./gradlew assembleRelease lintRelease
+```
+
+The APK is written to `app/build/outputs/apk/release/app-release.apk`.
+The first build needs an internet connection to download Gradle and dependencies.
+
+Signing keys are excluded from this repository. If a local `app/debug.keystore` exists,
+the build uses it to remain compatible with the existing test APKs. Otherwise, Gradle
+generates a standard local debug key. These builds are intended for development;
+distribution requires a separately configured, permanent signing identity.
+Updating an installed APK requires the same signing certificate.
+
+### Source layout
+
+- `app/src/main/java/com/cosmod/launcherglass/ui` — settings and launcher communication.
+- `app/src/main/java/com/cosmod/launcherglass/xposed` — hooks and icon, folder, and photo materials.
+- `app/src/main/java/com/cosmod/launcherglass/util` — wallpaper capture and processing, diagnostics.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — rendering architecture and change history.
+
+Historical `../scratch/...` links in the architecture notes refer to local developer
+validation artifacts and are not included in the published source.
+
+### Credits and license
+
+[PixelLauncherEnhanced](https://github.com/Mahmud0808/PixelLauncherEnhanced) — Mahmud0808.
+Thanks to [@anime_killer2009](https://t.me/anime_killer2009) for their help.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for adaptation details.
+License: [GNU GPL v3](COPYING).
+
+### Support the project
+
+[Support development through CloudTips](https://pay.cloudtips.ru/p/e6230fb4).
