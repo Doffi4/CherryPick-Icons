@@ -106,7 +106,7 @@ and creating the interface.
 ### Compatibility and installation
 
 Root, LSPosed, and a system launcher with the **Flux** icon style are required.
-The build targets Android 12 or later; Liquid Glass requires Android 13 or later.
+The minimum Android version is 12; Liquid Glass requires Android 13 or later.
 Behavior depends on the launcher and firmware versions. Device testing has only been
 performed on **ColorOS 17**, including System Launcher 17.3.9. Analysis of launcher 16.x
 APKs is not a substitute for testing on ColorOS 16; compatibility issues may occur.

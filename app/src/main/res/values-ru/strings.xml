@@ -1,42 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CherryPick Icons</string>
-    <string name="module_active">Модуль активен в LSPosed</string>
-    <string name="module_inactive">Модуль не активен в LSPosed! Включите его и перезапустите систему</string>
-    <string name="enable_transparent_icons">Прозрачный фон иконок (Monet)</string>
-    <string name="enable_transparent_icons_desc">Делает заднюю плашку (второй цвет Monet) полностью прозрачной</string>
-    <string name="bg_opacity_title">Непрозрачность заднего фона: %1$d%%</string>
-    <string name="bg_opacity_zero">0% — полностью прозрачный фон (только значок)</string>
-    <string name="bg_opacity_desc">Регулировка прозрачности задней плашки значка</string>
-    <string name="force_themed_title">Принудительно для сторонних приложений</string>
-    <string name="force_themed_desc">Применять эффект к приложениям без встроенной поддержки Monet (выключите, если икон-пак Flux уже содержит значки)</string>
-    <string name="btn_restart_launcher">Перезапустить лаунчер</string>
-    <string name="restarting_launcher">Перезапуск лаунчера ColorOS...</string>
-    <string name="restart_success">Лаунчер успешно перезапущен!</string>
-    <string name="restart_failed">Не удалось перезапустить лаунчер (нужны Root-права)</string>
-    <string name="btn_view_logs">Просмотреть логи (Диагностика)</string>
-    <string name="blur_icons_title">Размытие фона</string>
-    <string name="blur_icons_desc">Матовое стекло под иконками</string>
-    <string name="blur_radius_title">Радиус размытия: %1$d px</string>
-    <string name="blur_mode_title">Режим размытия</string>
-    <string name="mode_wallpaper">Статичный фрагмент обоев</string>
-    <string name="mode_wallpaper_desc">Сохранённый размытый фрагмент обоев.</string>
-    <string name="mode_live">Живое размытие</string>
-    <string name="mode_live_desc">Обновляет размытие при перелистывании и движении экрана.</string>
-    <string name="live_fps_title">Лимит живого размытия: %1$d FPS</string>
-    <string name="live_fps_desc">Количество обновлений размытия при движении экрана (1–60)</string>
-    <string name="idle_pause_title">Энергосбережение</string>
-    <string name="idle_pause_desc">Пауза при неподвижном экране, продолжение при касании.</string>
-    <string name="icon_stroke_title">Контур иконок</string>
-    <string name="icon_stroke_desc">Тонкая стеклянная кромка по контуру иконки</string>
-    <string name="stroke_opacity_title">Непрозрачность контура: %1$d%%</string>
-    <string name="glyph_shadow_title">Затенение логотипа</string>
-    <string name="glyph_shadow_desc">Мягкая тень под логотипом добавляет глубину над стеклом</string>
-    <string name="shadow_opacity_title">Непрозрачность тени логотипа: %1$d%%</string>
-    <string name="gradient_opacity_title">Интенсивность объёма: %1$d%%</string>
-    <string name="gradient_opacity_desc">Плавный градиент стекла со светлым верхом и затемнённым низом</string>
-    <string name="folder_blur_title">Размытие иконок в папках</string>
-    <string name="drawer_blur_title">Размытие иконок в меню приложений</string>
-    <string name="drawer_blur_desc">Размывает фон иконок в меню приложений. Отключите для плоского фона.</string>
-    <string name="folder_blur_desc">Размывает иконки внутри папок и в их миниатюрах. Отключите для плоского фона.</string>
 </resources>

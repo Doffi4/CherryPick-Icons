@@ -7,7 +7,7 @@ Release preparation:
 - Source packaging excludes local SDK paths, signing keys, build output and reference checkouts. Builds without the local testing key use Gradle's generated debug key.
 - Three outdated or ambiguous comments about wallpaper capture, log filtering and mini-icon pacing now describe the actual behavior.
 - The bilingual project README identifies the beta status, ColorOS 17 device testing and possible ColorOS 16 compatibility issues, and credits GPT 6.1 Sol as requested by the author.
-- GPU shader entry points explicitly check Android 13 availability. Russian translations are complete for the retained legacy resource set. Lint errors now fail release checks; optional OEM reflection and caught wallpaper-permission fallbacks have narrowly documented annotations.
+- GPU shader entry points explicitly check Android 13 availability. The unused legacy XML screen, old colors and obsolete localized strings were removed together with unused ViewBinding generation. Lint errors now fail release checks; optional OEM reflection and caught wallpaper-permission fallbacks have narrowly documented annotations.
 
 Launcher restart / ColorOS 16 recovery:
 
