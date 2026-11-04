@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CherryPick Icons</string>
+    <string name="module_active">Module active in LSPosed</string>
+    <string name="module_inactive">Module is disabled in LSPosed</string>
+    <string name="enable_transparent_icons">Enable module</string>
+    <string name="enable_transparent_icons_desc">Icon effects and animation changes. Disable to use the native launcher behavior.</string>
+    <string name="blur_icons_title">Background blur</string>
+    <string name="blur_icons_desc">Frosted glass behind icon backgrounds</string>
+    <string name="blur_radius_title">Blur radius: %1$d px</string>
+    <string name="blur_mode_title">Blur mode</string>
+    <string name="mode_wallpaper">Static wallpaper sample</string>
+    <string name="mode_wallpaper_desc">A cached blurred wallpaper sample.</string>
+    <string name="mode_live">Live blur</string>
+    <string name="mode_live_desc">Updates blur while swiping or moving the screen.</string>
+    <string name="live_fps_title">Live blur limit: %1$d FPS</string>
+    <string name="live_fps_desc">Blur updates per second during screen movement (1–60)</string>
+    <string name="idle_pause_title">Idle power saving</string>
+    <string name="idle_pause_desc">Pause updates while the screen is still. Resume on touch.</string>
+    <string name="icon_stroke_title">Icon contour</string>
+    <string name="icon_stroke_desc">A subtle glass edge along the icon contour</string>
+    <string name="stroke_opacity_title">Contour opacity: %1$d%%</string>
+    <string name="glyph_shadow_title">Logo shading</string>
+    <string name="glyph_shadow_desc">A soft shadow beneath the logo adds depth above the glass</string>
+    <string name="shadow_opacity_title">Logo shadow opacity: %1$d%%</string>
+    <string name="gradient_opacity_title">Depth intensity: %1$d%%</string>
+    <string name="gradient_opacity_desc">A smooth glass gradient with a light top and a shaded bottom</string>
+    <string name="bg_opacity_title">Background opacity: %1$d%%</string>
+    <string name="bg_opacity_zero">0% — fully transparent background</string>
+    <string name="bg_opacity_desc">Adjust the opacity of icon backgrounds</string>
+    <string name="force_themed_title">Force themed third-party icons</string>
+    <string name="force_themed_desc">Generate icons for apps without monochrome icons. Disable if your icon pack already includes them.</string>
+    <string name="btn_restart_launcher">Restart launcher</string>
+    <string name="restarting_launcher">Restarting the launcher…</string>
+    <string name="restart_success">Launcher restarted</string>
+    <string name="restart_failed">Could not restart launcher (root access required)</string>
+    <string name="btn_view_logs">Diagnostics · logs</string>
+    <string name="folder_blur_title">Blur icons in folders</string>
+    <string name="drawer_blur_title">Blur icons in the app drawer</string>
+    <string name="drawer_blur_desc">Blur icon backgrounds in the app drawer. Turn off to use flat backgrounds.</string>
+    <string name="folder_blur_desc">Blur icons inside folders and in folder previews. Turn off to use flat backgrounds.</string>
+</resources>
