@@ -26,6 +26,18 @@ object GlassLogger {
         } catch (_: Throwable) {}
     }
 
+    private val counters = HashMap<String, Int>()
+
+    /**
+     * Hot-path diagnostics: the first few occurrences, then one aggregated
+     * line per [every] events. XposedBridge.log is synchronous file I/O and
+     * must not run on every animation frame.
+     */
+    fun limited(component: String, key: String, every: Int = 500, message: () -> String) {
+        val count = synchronized(counters) { (counters[key] ?: 0).inc().also { counters[key] = it } }
+        if (count <= 3 || count % every == 0) i(component, if (count <= 3) message() else "${message()} (x$count)")
+    }
+
     fun d(component: String, message: String) {
         i(component, message)
     }

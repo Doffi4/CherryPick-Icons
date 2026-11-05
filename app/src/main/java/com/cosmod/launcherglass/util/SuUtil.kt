@@ -61,6 +61,8 @@ object SuUtil {
     fun readLogcat(context: android.content.Context): String = buildString {
         appendLine("=== Root and launcher processes ===")
         appendLine(collect("id; ps -A -o PID,NAME | grep -E 'launcher|lspd|lsposed'"))
+        appendLine("=== Boot restart ===")
+        appendLine(try {BootRestart.describe(context)}catch(e:Exception){"[unavailable: ${e.message}]"})
         appendLine("=== Module logcat (all buffers, last 1500 lines) ===")
         appendLine(collect("logcat -b all -d -v threadtime -t 1500 'ColorOSGlass:V' '*:S'"))
         appendLine("=== Launcher process logcat (last 1200 lines per PID) ===")

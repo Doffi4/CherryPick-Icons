@@ -57,6 +57,29 @@ object IconGlassHook {
         return liveSnapshot
     }
     private val liveRoots=WeakHashMap<View,ViewTreeObserver.OnPreDrawListener>()
+    // Passive counters only: never create a timer or a frame for diagnostics.
+    private var idleSince=0L
+    private var idlePreDraws=0
+    private var idleInvalidations=0
+    private var idleRestorations=0
+    private var idleFrameRequests=0
+    private var idleDeferredSamples=0
+    internal fun noteDeferredSampleFrame(){if(!LiveBlurEngine.isMoving)idleDeferredSamples++}
+    private fun reportIdleFrame(recovered:Int) {
+        if(LiveBlurEngine.isMoving || !LiveBlurEngine.isResumed){
+            idleSince=0L;idlePreDraws=0;idleInvalidations=0;idleRestorations=0
+            idleFrameRequests=0;idleDeferredSamples=0
+            return
+        }
+        val now=android.os.SystemClock.uptimeMillis()
+        if(idleSince==0L)idleSince=now
+        idlePreDraws++
+        idleRestorations+=recovered
+        if(now-idleSince>=10_000L){
+            GlassLogger.i("IdleFrames","${now-idleSince}ms preDraw=$idlePreDraws moduleInvalidations=$idleInvalidations restored=$idleRestorations wallpaperRequests=$idleFrameRequests deferredSamples=$idleDeferredSamples")
+            idleSince=now;idlePreDraws=0;idleInvalidations=0;idleRestorations=0;idleFrameRequests=0;idleDeferredSamples=0
+        }
+    }
     private fun registerLiveView(view:View){
         if(Looper.myLooper()!=Looper.getMainLooper()){view.post {registerLiveView(view)};return}
         if(liveViews.put(view,true)==null)liveSnapshotDirty=true
@@ -66,20 +89,26 @@ object IconGlassHook {
         val weak=WeakReference(root)
         val listener=ViewTreeObserver.OnPreDrawListener {
             val current=weak.get()
+            var recovered=0
             if(current!=null && PrefsHelper.enabled && PrefsHelper.blurEnabled) {
+                IconMaterialRenderer.beginFrame()
                 // OEM trim/snapshot teardown also discards nested nodes in
                 // static mode, sometimes before the resume callback arrives.
                 // Restore those lists without changing the crop or FPS clock.
-                recoverDiscardedIcons(current)
+                recovered=recoverDiscardedIcons(current)
+                // Lifted backdrops follow this frame's final DragView transform.
+                LiftedBackdrop.prepare()
+                IconMaterialRenderer.updateLifted(current)
             }
             if(current!=null && PrefsHelper.enabled && PrefsHelper.blurEnabled &&
                 PrefsHelper.blurMode==com.cosmod.launcherglass.ui.SettingsProvider.BLUR_MODE_LIVE &&
-                !LiveBlurEngine.isEditing && (LiveBlurEngine.isResumed || NativeSurfaceLive.active)) {
+                (LiveBlurEngine.isResumed || NativeSurfaceLive.active)) {
                 // Animation/scroll transforms are final now; sample the same
                 // position that this frame will present, not the previous tick.
                 android.os.Trace.beginSection("CherryPick.sampleBeforeDraw")
                 try {invalidateActiveIcons(onlyChangedDrawerSamples=true,beforeDraw=current)}finally{android.os.Trace.endSection()}
             }
+            if(current!=null && PrefsHelper.enabled && PrefsHelper.blurEnabled)reportIdleFrame(recovered)
             true
         }
         liveRoots[root]=listener;root.viewTreeObserver.addOnPreDrawListener(listener)
@@ -93,16 +122,20 @@ object IconGlassHook {
         liveRoots.clear()
         for(reference in registeredViews())reference.get()?.invalidate()
         liveViews.clear();liveSnapshot=emptyList();liveSnapshotDirty=true
+        ForeignDraw.reset()
         IconMaterialRenderer.clear();DynamicIconForeground.clear()
     }
-    internal fun recoverDiscardedIcons(root:View){
+    internal fun recoverDiscardedIcons(root:View):Int {
+        var recovered=0
         for(reference in registeredViews()){
             val view=reference.get() ?: continue
             if(view.rootView!==root || !view.isAttachedToWindow || !view.isShown)continue
-            if(IconMaterialRenderer.restoreDiscardedSamples(view))view.invalidate()
+            if(IconMaterialRenderer.restoreDiscardedSamples(view)){view.invalidate();recovered++}
         }
+        return recovered
     }
     fun requestLiveFrame(){
+        if(!LiveBlurEngine.isMoving)idleFrameRequests++
         liveRoots.keys.weakSnapshot().filter {it.isAttachedToWindow && it.isShown}.forEach {it.postInvalidateOnAnimation()}
     }
     private val anchors=WeakHashMap<Bitmap,Anchor>()
@@ -204,18 +237,24 @@ object IconGlassHook {
             try {XposedHelpers.callMethod(view,"transformMatrixToGlobal",world)}catch(_:Throwable){continue}
             full.set(0f,0f,view.width.toFloat(),view.height.toFloat());world.mapRect(full)
             val metrics=view.resources.displayMetrics
+            val offscreen=full.right<=0f || full.bottom<=0f || full.left>=metrics.widthPixels || full.top>=metrics.heightPixels
             val edge=view.javaClass.name.contains("BubbleTextView") &&
                 (full.left<-.5f || full.top<-.5f || full.right>metrics.widthPixels+.5f || full.bottom>metrics.heightPixels+.5f)
             // Both update paths obey the edge optimization. The old switch only
             // removed forceEdge, leaving the ordinary sampler path running.
             if(edge && !PrefsHelper.disableEdgeOptimization && onlyChangedDrawerSamples)continue
-            val forceEdge=edge && PrefsHelper.disableEdgeOptimization
-            if(!forceEdge && (full.right<=0f || full.bottom<=0f || full.left>=metrics.widthPixels || full.top>=metrics.heightPixels))continue
-            if(onlyChangedDrawerSamples && !forceEdge && !LiveBlurEngine.isEditing && IconMaterialRenderer.hasBindings(view)){
+            // Forced edge repaint is only useful while pages actually move. On
+            // a stationary page the adjacent page's icons are permanently past
+            // the edge: invalidating them in every pre-draw requested the next
+            // frame forever and pinned LTPO displays at 60 Hz.
+            val forceEdge=edge && PrefsHelper.disableEdgeOptimization && LiveBlurEngine.hasRecentMotion
+            if(offscreen && !forceEdge)continue
+            if(onlyChangedDrawerSamples && !forceEdge && IconMaterialRenderer.hasBindings(view)){
                 if(IconMaterialRenderer.updateSamplers(view,wallpaper,world)){
                     if(beforeDraw==null)roots.add(view.rootView)
                     continue
                 }
+                if(beforeDraw!=null && !LiveBlurEngine.isMoving)idleInvalidations++
                 view.invalidate()
                 continue
             }
@@ -227,6 +266,7 @@ object IconGlassHook {
             val stamp=RepaintStamp(location[0],location[1],visible.width(),visible.height(),scroll,wallpaper,revision)
             if(forceEdge || !onlyChangedDrawerSamples || repaintStamps[view]!=stamp || IconMaterialRenderer.needsRecording(view)){
                 repaintStamps[view]=stamp
+                if(beforeDraw!=null && !LiveBlurEngine.isMoving)idleInvalidations++
                 view.invalidate()
             }
         }
@@ -391,7 +431,7 @@ object IconGlassHook {
         }
     }
     private fun wallpaper(a:Anchor?):Bitmap? {
-        if(!PrefsHelper.blurEnabled || LiveBlurEngine.isEditing)return null
+        if(!PrefsHelper.blurEnabled)return null
         if(a?.folder==true && !PrefsHelper.folderIconsBlurEnabled)return null
         if(a?.drawer==true && !PrefsHelper.drawerBlurEnabled)return null
         return WallpaperHelper.getBlurredWallpaper(appContext)
@@ -458,7 +498,8 @@ object IconGlassHook {
         @Deprecated("Deprecated in Java")override fun getOpacity()=PixelFormat.TRANSLUCENT
     }
     private fun drawMaterial(drawable:Drawable,canvas:Canvas,bounds:Rect):Boolean {
-                if(nativeDrawables.containsKey(drawable))return false
+                // Never extract an icon from a composed drag preview snapshot.
+                if(nativeDrawables.containsKey(drawable) || DragPreviewMaterial.isPreview(drawable))return false
                 if(bounds.isEmpty)return false
                 if(SpecialIconSupport.dynamic(drawable) && drawable.alpha<255 && rawFrames[drawable]==null)return false
                 // FolderPagedView records the adjacent page during opening.
@@ -470,13 +511,29 @@ object IconGlassHook {
                 // composed snapshot for a second time.
                 val surfaceSource=NativeSurfaceLive.materialSource
                 val owner=surfaceSource ?: host(drawable)
+                // OEM edit-mode select dots record this icon again into their
+                // own node, often as a fresh constantState copy per draw. Show
+                // the element's own material: no per-copy layers or sampler.
+                val foreign=surfaceSource==null && owner!=null && ForeignDraw.isForeign(owner)
+                val identity=if(foreign)ForeignDraw.original(owner!!,drawable)else drawable
                 // The OEM can record an adjacent page before it becomes
                 // visible. A screen-space visibility rejection would cache an
                 // empty icon until an unrelated invalidation (e.g. unlock).
                 // Only the recording canvas may reject its own local content.
-                val sourceIcon=surfaceSource?.let {try {XposedHelpers.callMethod(it,"getIcon") as? Drawable}catch(_:Throwable){null}} ?: drawable
+                val sourceIcon=surfaceSource?.let {try {XposedHelpers.callMethod(it,"getIcon") as? Drawable}catch(_:Throwable){null}} ?: identity
                 if(SpecialIconSupport.isContainer(sourceIcon))return false
                 val nativeParts=cachedLayers(sourceIcon) ?: return false
+                // Native drag preview Picture: leave this plate's footprint
+                // empty and draw the same live material inside the DragView.
+                if(surfaceSource==null && DragPreviewMaterial.captures(canvas)){
+                    @Suppress("DEPRECATION")
+                    val local=Matrix().also {canvas.getMatrix(it)}
+                    previewTransform.get()?.let {local.setConcat(it,Matrix(local))}
+                    val rect=RectF(bounds);local.mapRect(rect)
+                    val preview=folderPreview.get()==true || owner?.javaClass?.name?.contains("FolderIcon")==true
+                    val mini=MiniIconRefresh.isMini(preview,rect.width(),rect.height(),bounds.width(),bounds.height())
+                    if(DragPreviewMaterial.captureIcon(canvas,sourceIcon,bounds,owner,drawable.alpha,mini,nativeParts.plateMaskBitmap))return true
+                }
                 val gpuDynamic=PrefsHelper.gpuEffects && SpecialIconSupport.dynamic(sourceIcon) && android.os.Build.VERSION.SDK_INT>=33 && canvas.isHardwareAccelerated && surfaceSource==null
                 val parts=if(gpuDynamic)DynamicIconForeground.plate(nativeParts)else nativeParts
                 val bitmap=raw(sourceIcon)
@@ -510,23 +567,71 @@ object IconGlassHook {
                     val mini=MiniIconRefresh.isMini(preview,rect.width(),rect.height(),bounds.width(),bounds.height())
                     if(preview && PrefsHelper.optimizeMiniIcons && previewSizeLogs.add("${owner.javaClass.name}:${owner.width}x${owner.height}:$mini:${folderPreview.get()==true}"))
                         GlassLogger.i("MaterialEngine","Folder preview pacing: host=${owner.javaClass.simpleName}/${owner.width}x${owner.height}, local=${rect.width()}x${rect.height()}, native=${bounds.width()}x${bounds.height()}, mini=$mini, limit=${MiniIconRefresh.fps(PrefsHelper.liveFps,mini,PrefsHelper.optimizeMiniIcons)} FPS")
-                    IconMaterialRenderer.Binding(owner,drawable,rect,a.screenW,a.screenH,mini)
+                    IconMaterialRenderer.Binding(owner,identity,rect,a.screenW,a.screenH,mini,materialAlpha,foreign=foreign)
                 }else null
                 val layer=if(materialAlpha<255)canvas.saveLayerAlpha(RectF(bounds),materialAlpha)else canvas.save()
                 try {render(canvas,bounds,parts,a,wallpaper(a),binding)}finally{canvas.restoreToCount(layer)}
                 if(gpuDynamic) {
-                    DynamicIconForeground.draw(sourceIcon,canvas,bounds,nativeParts.bgColor,bitmap ?: return true) {target ->
+                    DynamicIconForeground.draw(sourceIcon,canvas,bounds,nativeParts.bgColor,bitmap ?: return true,reuse=foreign) {target ->
                         val prior=recording.get();recording.set(true)
                         try {sourceIcon.draw(target)}finally{recording.set(prior)}
                     }
                 }
                 return true
     }
+    /**
+     * One icon of a native drag preview, drawn live inside the DragView. The
+     * material is the source icon's own (never extracted from the snapshot)
+     * and binds to [owner], the view that draws the preview, so samples and
+     * lifted backdrops follow the dragged position.
+     */
+    internal fun drawDragIcon(icon:Drawable,canvas:Canvas,bounds:Rect,owner:View,alpha:Int,mini:Boolean):Boolean {
+        if(bounds.isEmpty)return false
+        if(canvas.quickReject(bounds.left.toFloat(),bounds.top.toFloat(),bounds.right.toFloat(),bounds.bottom.toFloat()))return true
+        if(SpecialIconSupport.isContainer(icon))return false
+        val nativeParts=cachedLayers(icon) ?: return false
+        val gpuDynamic=PrefsHelper.gpuEffects && SpecialIconSupport.dynamic(icon) && android.os.Build.VERSION.SDK_INT>=33 && canvas.isHardwareAccelerated
+        val parts=if(gpuDynamic)DynamicIconForeground.plate(nativeParts)else nativeParts
+        val bitmap=raw(icon)
+        registerLiveView(owner)
+        val a=anchor(owner,if(bitmap!=null)Rect(0,0,bitmap.width,bitmap.height)else bounds)
+        @Suppress("DEPRECATION")
+        val binding=if(canvas.isHardwareAccelerated){
+            val local=Matrix().also {canvas.getMatrix(it)}
+            val rect=RectF(bounds);local.mapRect(rect)
+            // Folder preview items keep their resting wallpaper sample, at the
+            // full rate: the dragged preview moves every frame.
+            IconMaterialRenderer.Binding(owner,icon,rect,a.screenW,a.screenH,false,alpha,lift=!mini)
+        }else null
+        val layer=if(alpha<255)canvas.saveLayerAlpha(RectF(bounds),alpha)else canvas.save()
+        try {render(canvas,bounds,parts,a,wallpaper(a),binding)}finally{canvas.restoreToCount(layer)}
+        if(gpuDynamic && bitmap!=null){
+            DynamicIconForeground.draw(icon,canvas,bounds,nativeParts.bgColor,bitmap) {target ->
+                val prior=recording.get();recording.set(true)
+                try {icon.draw(target)}finally{recording.set(prior)}
+            }
+        }
+        return true
+    }
+    /** Stock icon pixels for a drag preview element when no material can be drawn. */
+    internal fun drawNativeIcon(icon:Drawable,canvas:Canvas,bounds:Rect,alpha:Float){
+        val prior=recording.get();recording.set(true)
+        val layer=if(alpha<1f)canvas.saveLayerAlpha(RectF(bounds),(alpha*255).toInt().coerceIn(0,255))else canvas.save()
+        try {
+            val internal=try {XposedHelpers.findMethodBestMatch(icon.javaClass,"drawInternal",Canvas::class.java,Rect::class.java)}catch(_:Throwable){null}
+            if(internal!=null)internal.invoke(icon,canvas,bounds)else icon.draw(canvas)
+        }catch(_:Throwable){}
+        finally{canvas.restoreToCount(layer);recording.set(prior)}
+    }
     fun init(lpparam:LoadPackageParam) {
         val loader=lpparam.classLoader
         NativeSurfaceLive.install(loader)
+        DragPreviewMaterial.install(loader)
         FolderMaterialHook.install(loader)
+        LiftedBackdrop.install(loader)
         MultiIconMaterialHook.install(loader)
+        TransitionCapture.install(loader)
+        ForeignDraw.install(loader)
         PhotoWidgetMaterial.install(loader)
         // Carry the source view through native asynchronous icon preparation.
         // The anchor belongs to this load request, never to a global last click.
@@ -666,8 +771,22 @@ object IconGlassHook {
         })
         for(name in listOf("com.oplus.icons.OplusFastBitmapDrawable","com.android.launcher3.icons.FastBitmapDrawable","com.android.launcher3.icons.ThemedIconDrawable","com.android.launcher3.icons.OplusThemedIconDrawable")) {
             val cls=XposedHelpers.findClassIfExists(name,loader) ?: continue
+            // Native drag previews draw their live materials first; the native
+            // snapshot (badges, labels, dots) then draws on top, also when the
+            // module was switched off after the preview had been recorded.
+            ModuleHooks.hookAllMethods(cls,"drawInternal",object:XC_MethodHook(){
+                override fun beforeHookedMethod(param:MethodHookParam){
+                    val drawable=param.thisObject as? Drawable ?: return
+                    if(recording.get()==true || !DragPreviewMaterial.isPreview(drawable))return
+                    val canvas=param.args.firstOrNull() as? Canvas ?: return
+                    val bounds=param.args.getOrNull(1) as? Rect ?: drawable.bounds
+                    try {DragPreviewMaterial.replay(drawable,canvas,bounds,if(PrefsHelper.enabled)host(drawable)else null)}
+                    catch(t:Throwable){if(preparationFailures.add(t.javaClass.name+":"+t.message))GlassLogger.e("MaterialEngine","Drag preview material failed",t)}
+                }
+            })
             ModuleHooks.hookAllMethods(cls,"drawInternal",hook {param ->
                 val drawable=param.thisObject as? Drawable ?: return@hook
+                if(DragPreviewMaterial.isPreview(drawable))return@hook
                 // Keep the 16.6.8 cover's native clipping/shine. Replace its
                 // base bitmap below, leaving independent sub-layer motion intact.
                 if(name=="com.oplus.icons.OplusFastBitmapDrawable" && Oxygen16IconSupport.background(drawable)!=null)return@hook
@@ -682,6 +801,10 @@ object IconGlassHook {
         if(floating!=null)ModuleHooks.hookAllMethods(floating,"setDrawable",hook {param ->
             GlassLogger.i("MaterialEngine","Native setDrawable: ${param.args.firstOrNull()?.javaClass?.name}")
             val original=param.args.firstOrNull() as? Drawable ?: return@hook
+            // A multi-icon launch/return floats a snapshot of the whole
+            // composed view, already with its plate and items. Extracting an
+            // icon from it stretched the items onto a dark plate.
+            if(TransitionCapture.isViewCapture(original))return@hook
             val material=snapshot(original) ?: return@hook
             param.args[0]=material
             if(param.args.getOrNull(1) is Drawable)param.args[1]=ColorDrawable(Color.TRANSPARENT)

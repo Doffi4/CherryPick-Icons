@@ -28,6 +28,8 @@ object PrefsHelper {
         private set
     @Volatile var optimizeMiniIcons=SettingsDefaults.boolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS)
         private set
+    @Volatile var liftedBackdrop=false
+        private set
     @Volatile var folderBlurEnabled: Boolean = SettingsDefaults.boolean(SettingsProvider.KEY_FOLDER_BLUR_ENABLED)
     @Volatile var folderIconsBlurEnabled=true
     @Volatile var photoWidgetBlur=false
@@ -162,6 +164,8 @@ object PrefsHelper {
             val hazeChanged=newHaze!=hazeEnabled
             val newDisableEdgeOptimization=bundle.getBoolean(SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION,SettingsDefaults.boolean(SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION))
             val newOptimizeMiniIcons=bundle.getBoolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS,SettingsDefaults.boolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS))
+            // Experimental: effective only while developer mode is on.
+            val newLiftedBackdrop=developer && bundle.getBoolean(SettingsProvider.KEY_LIFTED_BACKDROP,SettingsDefaults.boolean(SettingsProvider.KEY_LIFTED_BACKDROP))
             val newPhotoWidgetWidth=bundle.getInt(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH,SettingsDefaults.integer(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH)).coerceIn(0,100)
             val newPhotoWidgetDistortion=bundle.getInt(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_DISTORTION,50).coerceIn(0,300)
             val widgetChanged=newPhotoWidgetBlur!=photoWidgetBlur || newPhotoWidgetOpacity!=photoWidgetOpacity || newPhotoWidgetTint!=photoWidgetTint ||
@@ -244,7 +248,7 @@ object PrefsHelper {
                 newIconStroke != iconStroke || newStrokeOpacity != strokeOpacity ||
                 newGlyphShadow != glyphShadow || newShadowOpacity != shadowOpacity ||
                 newGradientOpacity != gradientOpacity || glyphOutlineChanged || paletteChanged ||
-                blurColorsChanged || blurStyleChanged || geometryChanged || vibrancyChanged || widgetChanged || depthChanged || hazeChanged || newDisableEdgeOptimization!=disableEdgeOptimization || newOptimizeMiniIcons!=optimizeMiniIcons
+                blurColorsChanged || blurStyleChanged || geometryChanged || vibrancyChanged || widgetChanged || depthChanged || hazeChanged || newDisableEdgeOptimization!=disableEdgeOptimization || newOptimizeMiniIcons!=optimizeMiniIcons || newLiftedBackdrop!=liftedBackdrop
 
             if (blurColorsChanged || paletteChanged || vibrancyChanged) {
                 blurSaturation = newBlurSaturation
@@ -260,6 +264,7 @@ object PrefsHelper {
             colorDepthStage=newDepthStage;hazeEnabled=newHaze
             disableEdgeOptimization=newDisableEdgeOptimization
             optimizeMiniIcons=newOptimizeMiniIcons
+            liftedBackdrop=newLiftedBackdrop
             folderBlurEnabled = newFolderBlurEnabled
             folderIconsBlurEnabled=newFolderIconsBlurEnabled
             drawerBlurEnabled = newDrawerBlurEnabled
@@ -313,6 +318,7 @@ object PrefsHelper {
             LiveBlurEngine.onPrefsChanged()
             NativeSurfaceLive.onSettingsChanged()
             FolderMaterialHook.onSettingsChanged()
+            LiftedBackdrop.onSettingsChanged()
             MultiIconMaterialHook.onSettingsChanged()
             PhotoWidgetMaterial.onSettingsChanged()
             if(!enabled){

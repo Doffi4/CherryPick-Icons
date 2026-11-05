@@ -19,7 +19,7 @@ internal object MultiIconMaterialHook {
         private var radius=Float.NaN
         private var spans=0
         private var geometry=-1L
-        private var fingerprint=0
+        private var fingerprint=0L
         override fun draw(canvas:Canvas){
             val view=owner.get() ?: return native.draw(canvas)
             if(!enabled()){native.draw(canvas);return}
@@ -40,15 +40,16 @@ internal object MultiIconMaterialHook {
                 val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",view.context.classLoader)
                 XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",clip,RectF(rect),nativeRadius,nativeRadius,sx,sy)
                 previous.set(rect);radius=nativeRadius;spans=sx*100+sy;geometry=SurfaceMaterial.geometryRevision
-                fingerprint=clip.approximate(1f).contentHashCode()
+                // The OEM contour is a function of size, radius and spans only.
+                fingerprint=SurfaceMaterial.descriptor("grid",sx,sy)
             }
             if(!SurfaceMaterial.draw(canvas,rect,view,this,nativeRadius,clip,alpha=native.alpha,
-                style=GlassStyle.icons().copy(extendedLens=true),pathFingerprint=fingerprint))native.draw(canvas)
+                style=GlassStyle.icons().copy(extendedLens=true),pathFingerprint=fingerprint,fallback=native))native.draw(canvas)
         }
         override fun onBoundsChange(bounds:Rect){native.bounds=bounds}
-        override fun setAlpha(alpha:Int){native.alpha=alpha;invalidateSelf()}
+        override fun setAlpha(alpha:Int){if(native.alpha!=alpha){native.alpha=alpha;invalidateSelf()}}
         override fun getAlpha()=native.alpha
-        override fun setColorFilter(filter:ColorFilter?){native.colorFilter=filter;invalidateSelf()}
+        override fun setColorFilter(filter:ColorFilter?){if(native.colorFilter!=filter){native.colorFilter=filter;invalidateSelf()}}
         @Deprecated("Deprecated in Java")override fun getOpacity()=PixelFormat.TRANSLUCENT
     }
     private val failures=HashSet<String>()
@@ -89,11 +90,15 @@ internal object MultiIconMaterialHook {
                 if(!enabled())return
                 val view=param.thisObject as? View ?: return
                 val native=NativeIconAccess.field(view,"mBackDrawable") as? Drawable ?: return
-                if(native is GridPlate)return
-                val plate=GridPlate(view,native).apply {bounds=Rect(native.bounds);callback=view}
-                grids[view]=plate
-                XposedHelpers.setObjectField(view,"mBackDrawable",plate)
-                GlassLogger.i("MultiIcons","Normal shortcut background installed: ${native.javaClass.name}")
+                if(native !is GridPlate){
+                    val plate=GridPlate(view,native).apply {bounds=Rect(native.bounds);callback=view}
+                    grids[view]=plate
+                    XposedHelpers.setObjectField(view,"mBackDrawable",plate)
+                    GlassLogger.i("MultiIcons","Normal shortcut background installed: ${native.javaClass.name}")
+                }
+                // App launch/return snapshot: the GPU image of this same view.
+                val canvas=param.args.firstOrNull() as? Canvas ?: return
+                if(TransitionCapture.drawHardware(view,canvas))param.result=null
             }
         })
         for(method in listOf("onLayout","dispatchDraw"))ModuleHooks.hookAllMethods(type,method,object:XC_MethodHook(){

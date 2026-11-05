@@ -16,8 +16,12 @@ internal object DynamicIconForeground {
             parts.plateMaskBitmap, parts.bgColor)
     }
 
-    fun draw(icon: Drawable, canvas: Canvas, bounds: Rect, background: Int, source: Bitmap, nativeDraw: (Canvas) -> Unit): Boolean {
+    /** [reuse]: an OEM decoration re-records the icon; show the current artwork node as is. */
+    fun draw(icon: Drawable, canvas: Canvas, bounds: Rect, background: Int, source: Bitmap, reuse: Boolean = false, nativeDraw: (Canvas) -> Unit): Boolean {
         if (Build.VERSION.SDK_INT < 33 || !canvas.isHardwareAccelerated) return false
+        if (reuse) entries[icon]?.let { entry ->
+            if (entry.node.hasDisplayList()) { canvas.drawRenderNode(entry.node); return true }
+        }
         val entry = entries.getOrPut(icon) { Entry(RenderNode("CherryPick.nativeDynamicArtwork"), RuntimeShader(SOURCE)) }
         if (entry.source !== source) {
             val pixels = IntArray(source.width*source.height)

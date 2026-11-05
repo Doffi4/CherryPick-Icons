@@ -8,14 +8,21 @@ import kotlin.math.*
 /** Native Flux alpha geometry, shared and baked once, never on live frames. */
 internal object GlassGeometry {
     private data class ShapeKey(val w:Int,val h:Int,val hash:Long)
-    private data class Geometry(val key:ShapeKey,val alpha:ByteArray,val depth:FloatArray,val rounding:Float)
-    private data class NativeMask(val generation:Int,val geometry:Geometry)
+    private class Geometry(val key:ShapeKey,val alpha:ByteArray,val rounding:Float){
+        // Only the contour rim needs the distance field; material creation
+        // with the contour switched off reads alpha and rounding only.
+        var depth:FloatArray?=null
+    }
+    private class NativeMask(val generation:Int,val geometry:Geometry)
     private data class RimKey(val shape:ShapeKey,val opacity:Int)
     private val nativeMasks=WeakHashMap<Bitmap,NativeMask>()
-    private val shapes=object:LruCache<ShapeKey,Geometry>(2*1024*1024){
+    // Sized for all plate, cluster and panel masks in use plus a history:
+    // a 2 MiB limit held two large masks, so alternating shapes recomputed
+    // their distance fields on the UI thread during drag and animations.
+    private val shapes=object:LruCache<ShapeKey,Geometry>(16*1024*1024){
         override fun sizeOf(key:ShapeKey,value:Geometry)=value.alpha.size*5
     }
-    private val rims=object:LruCache<RimKey,Bitmap>(2*1024*1024){
+    private val rims=object:LruCache<RimKey,Bitmap>(12*1024*1024){
         override fun sizeOf(key:RimKey,value:Bitmap)=value.allocationByteCount
     }
     @Synchronized private fun geometry(mask:Bitmap):Geometry {
@@ -33,6 +40,27 @@ internal object GlassGeometry {
         }
         val key=ShapeKey(w,h,hash)
         shapes.get(key)?.let {nativeMasks[mask]=NativeMask(mask.generationId,it);return it}
+        // Curvature affects the lens; exact clipping uses the native alpha.
+        var left=w;var top=h;var right=0;var bottom=0
+        for(y in 0 until h){
+            val row=y*w
+            for(x in 0 until w)if((alpha[row+x].toInt() and 255)>=128){
+                if(x<left)left=x;if(x>right)right=x
+                if(y<top)top=y;if(y>bottom)bottom=y
+            }
+        }
+        val edge=min(right-left+1,bottom-top+1).coerceAtLeast(1)
+        var inset=0
+        while(inset<edge/2 && (alpha[(top+inset).coerceIn(0,h-1)*w+(left+inset).coerceIn(0,w-1)].toInt() and 255)<128)inset++
+        val rounding=(inset/(.29289322f*edge)).coerceIn(0f,.5f)
+        com.cosmod.launcherglass.util.GlassLogger.limited("GlassGeometry","nativeMask"){"Native mask ${w}x$h, bounds=$left,$top,$right,$bottom, opticalCorner=$rounding"}
+        return Geometry(key,alpha,rounding).also {
+            shapes.put(key,it);nativeMasks[mask]=NativeMask(mask.generationId,it)
+        }
+    }
+    private fun depth(shape:Geometry):FloatArray {
+        shape.depth?.let {return it}
+        val w=shape.key.w;val h=shape.key.h;val alpha=shape.alpha
         // The distance field follows native smooth corners, including padding.
         val depth=FloatArray(alpha.size) {i ->
             if((alpha[i].toInt() and 255)<128)0f
@@ -57,19 +85,8 @@ internal object GlassGeometry {
                 if(x<w-1)depth[i]=min(depth[i],depth[i+w+1]+diagonal)
             }
         }
-        // Curvature affects the lens; exact clipping uses the native alpha.
-        var left=w;var top=h;var right=0;var bottom=0
-        for(y in 0 until h)for(x in 0 until w)if((alpha[y*w+x].toInt() and 255)>=128){
-            left=min(left,x);top=min(top,y);right=max(right,x);bottom=max(bottom,y)
-        }
-        val edge=min(right-left+1,bottom-top+1).coerceAtLeast(1)
-        var inset=0
-        while(inset<edge/2 && (alpha[(top+inset).coerceIn(0,h-1)*w+(left+inset).coerceIn(0,w-1)].toInt() and 255)<128)inset++
-        val rounding=(inset/(.29289322f*edge)).coerceIn(0f,.5f)
-        com.cosmod.launcherglass.util.GlassLogger.i("GlassGeometry","Native mask ${w}x$h, bounds=$left,$top,$right,$bottom, opticalCorner=$rounding")
-        return Geometry(key,alpha,depth,rounding).also {
-            shapes.put(key,it);nativeMasks[mask]=NativeMask(mask.generationId,it)
-        }
+        shape.depth=depth
+        return depth
     }
     @Synchronized fun rounding(mask:Bitmap)=geometry(mask).rounding
     @Synchronized fun rim(mask:Bitmap):Bitmap {
@@ -77,18 +94,26 @@ internal object GlassGeometry {
         val key=RimKey(shape.key,if(PrefsHelper.iconStroke)PrefsHelper.strokeOpacity.coerceIn(0,100)else 0)
         rims.get(key)?.let {return it}
         val width=mask.width;val height=mask.height
+        val distance=depth(shape)
         val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
         val pixels=IntArray(width*height)
         val edge=min(width,height).toFloat()
         val strength=key.opacity*.016f
+        // Tabulate both exponential falloffs at 1/8 px; evaluating exp() twice
+        // for every pixel dominated rim creation for large plates.
+        val ringScale=max(.7f,edge*.010f);val bevelScale=max(1f,edge*.085f)
+        val steps=(edge*4f+16f).toInt()
+        val ringTable=FloatArray(steps) {exp(-(it/8f)/ringScale)}
+        val bevelTable=FloatArray(steps) {exp(-(it/8f)/bevelScale)}
         for(y in 0 until height)for(x in 0 until width){
             val i=y*width+x
             val coverage=(shape.alpha[i].toInt() and 255)/255f
             if(coverage==0f)continue
             val cx=x+.5f-width*.5f;val cy=y+.5f-height*.5f
-            val depth=max(shape.depth[i]-.5f,0f)
-            val ring=exp(-depth/max(.7f,edge*.010f))
-            val bevel=exp(-depth/max(1f,edge*.085f))
+            val d=max(distance[i]-.5f,0f)
+            val index=(d*8f).toInt()
+            val ring=if(index<steps)ringTable[index]else exp(-d/ringScale)
+            val bevel=if(index<steps)bevelTable[index]else exp(-d/bevelScale)
             // Fade diagonally into the dark lower-right reflection.
             val diagonal=(.5f+.5f*(cx/(width*.5f)*.65f+cy/(height*.5f)*.76f)/1.41f)
             val fade=((diagonal-.12f)/.76f).coerceIn(0f,1f)

@@ -92,12 +92,17 @@ object SettingsDefaults {
         editor.remove("color_theme").putInt("color_profiles_revision", 1).apply()
     }
     private val booleans = mapOf(
+        SettingsProvider.KEY_BOOT_RESTART to true,
+        SettingsProvider.KEY_BOOT_RESTART_TOAST to true,
         SettingsProvider.KEY_DEVELOPER_MODE to false,
         SettingsProvider.KEY_GPU_EFFECTS to true,
         SettingsProvider.KEY_COLOR_DEPTH_ENABLED to false,
         SettingsProvider.KEY_HAZE_ENABLED to false,
         SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION to true,
         SettingsProvider.KEY_OPTIMIZE_MINI_ICONS to true,
+        // Experimental and untested on devices: explicit developer opt-in only.
+        SettingsProvider.KEY_LIFTED_BACKDROP to false,
+        SettingsProvider.KEY_MD3_UI to false,
         SettingsProvider.KEY_PHOTO_WIDGET_BLUR to false,
         SettingsProvider.KEY_PHOTO_WIDGET_TINT to false,
         SettingsProvider.KEY_FOLDER_ICONS_BLUR_ENABLED to true,
@@ -152,7 +157,7 @@ object SettingsDefaults {
         SettingsProvider.KEY_GRADIENT_OPACITY to 50
     )
     /** Only portable module preferences. Device reports, language and migration keys stay local. */
-    fun portable(): Map<String, Any> = booleans + integers + mapOf(FolderSettingsKeys.OWN to false) +
+    fun portable(): Map<String, Any> = (booleans - SettingsProvider.KEY_BOOT_RESTART - SettingsProvider.KEY_BOOT_RESTART_TOAST - SettingsProvider.KEY_MD3_UI) + integers + mapOf(FolderSettingsKeys.OWN to false) +
         FolderSettingsKeys.booleans.associate { FolderSettingsKeys.key(it) to boolean(it) } +
         FolderSettingsKeys.integers.associate { FolderSettingsKeys.key(it) to integer(it) }
     fun boolean(key: String): Boolean = if(key==FolderSettingsKeys.OWN)false else booleans[key] ?: if(key.startsWith("folder_"))boolean(key.removePrefix("folder_"))else booleans.getValue(key)

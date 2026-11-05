@@ -155,7 +155,7 @@ object WallpaperHelper {
 
                 if (!valid() || !PrefsHelper.enabled || !PrefsHelper.blurEnabled || (!LiveBlurEngine.isResumed && !com.cosmod.launcherglass.xposed.NativeSurfaceLive.active) ||
 
-                    (LiveBlurEngine.isAppLaunchInProgress && !com.cosmod.launcherglass.xposed.NativeSurfaceLive.active) || LiveBlurEngine.isEditing) return@execute
+                    (LiveBlurEngine.isAppLaunchInProgress && !com.cosmod.launcherglass.xposed.NativeSurfaceLive.active)) return@execute
 
                 signature = GpuWallpaperBlur.fingerprint(frame)
 

@@ -29,7 +29,8 @@ internal object FolderMaterialHook {
     private fun enabled(view:View?)=PrefsHelper.enabled && PrefsHelper.blurEnabled && (shortcut(view) || PrefsHelper.folderBlurEnabled)
     private fun style(view:View)=if(shortcut(view))GlassStyle.icons().copy(extendedLens=true)else FolderSettings.style()
     private fun field(owner:Any,name:String):Any?=try {XposedHelpers.getObjectField(owner,name)}catch(_:Throwable){null}
-    private fun nativePath(view:View,bounds:Rect,radius:Float,info:Any?,sx:Int,sy:Int):Path?=try {
+    private class NativeShape(val path:Path,val descriptor:Long)
+    private fun nativePath(view:View,bounds:Rect,radius:Float,info:Any?,sx:Int,sy:Int):NativeShape?=try {
         val loader=view.context.classLoader
         val type=when {sx==1 && sy==2 -> 15;sx==2 && sy==1 -> 16;sx==2 && sy==2 -> 1;else -> 2}
         val resolver=XposedHelpers.findClass("com.android.launcher3.uioverrides.states.blurdrawable.BlurTransitionDrawable",loader)
@@ -51,6 +52,7 @@ internal object FolderMaterialHook {
             Path(XposedHelpers.getObjectField(wrapper,"mStrokePath") as Path).also {if(!it.isEmpty)nativeShapes.put(key,it)}
         }
         Path(cached).apply {offset(bounds.left.toFloat(),bounds.top.toFloat())}.takeUnless {it.isEmpty}
+            ?.let {NativeShape(it,SurfaceMaterial.descriptor("oem",type,corner.toString(),weight))}
     }catch(t:Throwable){
         if(geometryLogs.add(t.javaClass.name+":"+t.message))GlassLogger.e("FolderMaterial","OEM geometry unavailable; using native fallback clip",t)
         null
@@ -65,9 +67,19 @@ internal object FolderMaterialHook {
         private var cachedSpanX=0
         private var cachedSpanY=0
         private var cachedRevision=-1L
-        private var pathFingerprint=0
+        private var pathFingerprint:Long?=null
+        // Called only from the owner's current onDraw. Scheduling another
+        // invalidation here would request a new frame for a value already
+        // applied to this one.
+        fun setDrawOpacity(alpha:Int){opacity=alpha.coerceIn(0,255)}
+        // The drawing view, when known. A folder drag sets this drawable as the
+        // DragView background, which moves Drawable.callback to that ImageView;
+        // after the drop a stale callback would map the folder plate onto the
+        // detached DragView and route its invalidations there.
+        var drawingHost:View?=null
         override fun draw(canvas:Canvas){
-            val view=(callback as? View) ?: source.get() ?: return
+            val host=callback as? View
+            val view=drawingHost ?: host?.takeIf {it.background===this || (it as? ImageView)?.drawable===this} ?: source.get() ?: host ?: return
             if(!enabled(source.get())) {fallback?.bounds=bounds;fallback?.draw(canvas);return}
             val native=owner?.get()
             val old=fallback?.bounds?.let(::Rect)
@@ -82,25 +94,29 @@ internal object FolderMaterialHook {
             val path=cachedPath
             if(cachedBounds!=bounds || cachedRadius!=radius || cachedInfo!==info || cachedSpanX!=sx || cachedSpanY!=sy || cachedRevision!=geometryRevision){
             path.reset()
+            pathFingerprint=null
             if(native!=null){
-                nativePath(view,bounds,radius,info,sx,sy)?.let {path.set(it)}
+                nativePath(view,bounds,radius,info,sx,sy)?.let {path.set(it.path);pathFingerprint=it.descriptor}
             }
             @Suppress("UNCHECKED_CAST")
             val clip=field(view,"mSmoothClipPathFunction") as? BiConsumer<Path,RectF>
-            if(path.isEmpty)try {clip?.accept(path,RectF(bounds))}catch(_:Throwable){}
+            if(path.isEmpty && clip!=null)try {
+                clip.accept(path,RectF(bounds))
+                if(!path.isEmpty)pathFingerprint=SurfaceMaterial.descriptor("smooth",System.identityHashCode(clip))
+            }catch(_:Throwable){}
             if(path.isEmpty && native!=null)try {
                 val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",view.context.classLoader)
                 XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",path,RectF(bounds),radius,radius,sx,sy)
+                if(!path.isEmpty)pathFingerprint=SurfaceMaterial.descriptor("icon",sx,sy)
             }catch(_:Throwable){}
             cachedBounds.set(bounds);cachedRadius=radius;cachedInfo=info;cachedSpanX=sx;cachedSpanY=sy;cachedRevision=geometryRevision
-            pathFingerprint=path.approximate(1f).contentHashCode()
             }
             if(!logged){logged=true;GlassLogger.i("FolderMaterial","Native shape: radius=$radius, path=${!path.isEmpty}, bounds=$bounds, callback=${callback?.javaClass?.simpleName}")}
-            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint)){
+            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint,fallback=fallback)){
                 fallback?.bounds=bounds;fallback?.draw(canvas)
             }
         }
-        override fun setAlpha(alpha:Int){opacity=alpha;invalidateSelf()}
+        override fun setAlpha(alpha:Int){if(opacity!=alpha){opacity=alpha;invalidateSelf()}}
         override fun getAlpha()=opacity
         override fun setColorFilter(filter:ColorFilter?){}
         @Deprecated("Deprecated in Java")override fun getOpacity()=PixelFormat.TRANSLUCENT
@@ -126,7 +142,11 @@ internal object FolderMaterialHook {
         if(field(background,"mBgDrawable") is Material)return
         val activity=NativeIconAccess.call(view,"getLauncher") ?: return
         backgrounds[background]=State(WeakReference(view.context),WeakReference(view),WeakReference(activity))
-        if(replace(background,view))XposedHelpers.callMethod(background,"setBackground",view)
+        // On Launcher 17.3.9 setBackground takes IGroupView, while
+        // ShortcutContainer does not implement it. Replacement installs the
+        // material in mBgDrawable; the separate GridRecyclerView owns the
+        // normal shortcut plate. Never call the incompatible folder overload.
+        replace(background,view)
     }
     fun onSettingsChanged(){
         if(Looper.myLooper()!=Looper.getMainLooper()){main.post {onSettingsChanged()};return}
@@ -161,12 +181,17 @@ internal object FolderMaterialHook {
                     // The non-blur ImageView branch would clip our exact native
                     // contour a second time using the older fallback shape.
                     material.setBounds(0,0,view.width,view.height)
-                    if(field(view,"mDrawCoverDrawable")==true){
-                        (field(view,"mCoverDrawable") as? Drawable)?.let {cover ->
-                            cover.bounds=material.bounds;cover.draw(canvas);material.alpha=255-cover.alpha
-                        }
+                    val cover = if(field(view,"mDrawCoverDrawable")==true) field(view,"mCoverDrawable") as? Drawable else null
+                    if(cover!=null){
+                        cover.bounds=material.bounds;cover.draw(canvas)
                     }
-                    material.draw(canvas)
+                    // Cover alpha is transient. Do not retain the final faded-out
+                    // value after the OEM stops drawing its transition cover.
+                    material.setDrawOpacity(255-(cover?.alpha ?: 0))
+                    // Reclaim invalidations from a finished folder DragView.
+                    if(material.callback!==view && (material.callback as? View)?.isAttachedToWindow!=true)material.callback=view
+                    material.drawingHost=view
+                    try {material.draw(canvas)}finally{material.drawingHost=null}
                     param.result=null
                 }
             })
@@ -187,10 +212,12 @@ internal object FolderMaterialHook {
                     val info=param.args.getOrNull(2) ?: view.tag
                     val sx=(info?.let {XposedHelpers.callMethod(it,"getSpanX")} as? Int) ?: 1
                     val sy=(info?.let {XposedHelpers.callMethod(it,"getSpanY")} as? Int) ?: 1
-                    val path=nativePath(view,bounds,radius,info,sx,sy) ?: Path()
+                    val shape=nativePath(view,bounds,radius,info,sx,sy)
+                    val path=shape?.path ?: Path()
                     val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",loader)
                     if(path.isEmpty)XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",path,RectF(bounds),radius,radius,sx,sy)
-                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path,alpha=material.alpha,style=style(view))){
+                    val fingerprint=shape?.descriptor ?: SurfaceMaterial.descriptor("icon",sx,sy)
+                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path,alpha=material.alpha,style=style(view),pathFingerprint=fingerprint)){
                         if(converted.put(param.thisObject,true)==null)GlassLogger.i("FolderMaterial","Native hover/resize material: bounds=$bounds, radius=$radius")
                         param.result=null
                     }

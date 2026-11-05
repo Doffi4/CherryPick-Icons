@@ -215,7 +215,7 @@ object LauncherWallpaperCapture {
             return
         }
         val context = WallpaperHelper.appContext ?: return
-        if (!PrefsHelper.enabled || !PrefsHelper.blurEnabled || LiveBlurEngine.isEditing ||
+        if (!PrefsHelper.enabled || !PrefsHelper.blurEnabled ||
             (!LiveBlurEngine.isResumed && !com.cosmod.launcherglass.xposed.NativeSurfaceLive.active) ||
             (LiveBlurEngine.isAppLaunchInProgress && !com.cosmod.launcherglass.xposed.NativeSurfaceLive.active) ||
             (LiveBlurEngine.isWorkspaceBlurSuspended && !PrefsHelper.drawerBlurEnabled) ||

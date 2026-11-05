@@ -38,6 +38,18 @@ object LiveBlurEngine {
         private set
 
     private var lastWorkspaceScrollMs = 0L
+
+    /**
+     * Touch, scrolling, transitions or wallpaper motion during the settling
+     * window. Unlike [isMoving] this does not depend on the idle-pause switch,
+     * so per-frame work gated by it always stops on a stationary screen.
+     */
+    val hasRecentMotion: Boolean
+        get() {
+            val now = SystemClock.uptimeMillis()
+            return activePointerCount > 0 || now - lastMotionTimeMs < 600L || now < transitionRefreshUntilMs ||
+                isWallpaperMoving || transitionVisible()
+        }
     val isWorkspaceScrolling: Boolean
         get() = lastWorkspaceScrollMs > 0L && SystemClock.uptimeMillis() - lastWorkspaceScrollMs < 90L
 
@@ -58,7 +70,7 @@ object LiveBlurEngine {
     }
 
     fun onWallpaperFrameReady() = onMainThread {
-        if (!PrefsHelper.enabled || !PrefsHelper.blurEnabled || isEditing || !isResumed || isAppLaunchInProgress) return@onMainThread
+        if (!PrefsHelper.enabled || !PrefsHelper.blurEnabled || !isResumed || isAppLaunchInProgress) return@onMainThread
         if (PrefsHelper.blurMode == SettingsProvider.BLUR_MODE_LIVE) {
             IconGlassHook.requestLiveFrame()
             if (!isTickerRunning.get()) {
@@ -98,7 +110,7 @@ object LiveBlurEngine {
         } else {
             lastMotionTimeMs = SystemClock.uptimeMillis()
             transitionRefreshUntilMs = maxOf(transitionRefreshUntilMs, lastMotionTimeMs + 600L)
-            if (isResumed && !isAppLaunchInProgress && !isEditing) {
+            if (isResumed && !isAppLaunchInProgress) {
                 IconGlassHook.invalidateActiveIcons()
                 startTickerIfNeeded()
                 LauncherWallpaperCapture.startMotionWatch()
@@ -118,7 +130,7 @@ object LiveBlurEngine {
         }
     }
     private fun stopFrameLoop() {
-        if(transitionVisible() && !isEditing && PrefsHelper.enabled){
+        if(transitionVisible() && PrefsHelper.enabled){
             startTickerIfNeeded()
             return
         }
@@ -140,11 +152,9 @@ object LiveBlurEngine {
         isAppLaunchInProgress = false
         isResumed = true
         lastMotionTimeMs = SystemClock.uptimeMillis()
-        if (!isEditing) {
-            transitionRefreshUntilMs = maxOf(transitionRefreshUntilMs, lastMotionTimeMs + 600L)
-            if (wasSuspended) IconGlassHook.invalidateActiveIcons(onlyChangedDrawerSamples=true)
-            startTickerIfNeeded()
-        }
+        transitionRefreshUntilMs = maxOf(transitionRefreshUntilMs, lastMotionTimeMs + 600L)
+        if (wasSuspended) IconGlassHook.invalidateActiveIcons(onlyChangedDrawerSamples=true)
+        startTickerIfNeeded()
     }
 
     @Volatile
@@ -154,20 +164,12 @@ object LiveBlurEngine {
     fun onEditModeChanged(editing: Boolean) = onMainThread {
         if (isEditing != editing) {
             isEditing = editing
-            if (editing) LauncherWallpaperCapture.stopMotionWatch()
-            mainHandler.removeCallbacks(tickerRunnable)
-            isTickerRunning.set(false)
-            isMoving = false
-            activePointerCount = 0
-            transitionRefreshUntilMs = 0L
             lastMotionTimeMs = SystemClock.uptimeMillis()
-            // One repaint switches the background. Selection controls then use
-            // the launcher's own redraws instead of our forced frame loop.
+            // Keep live material and the OEM animation alive during drag/edit.
+            // The ordinary idle and FPS gates still limit background work.
             IconGlassHook.invalidateActiveIcons()
-            if (!editing) {
-                startTickerIfNeeded()
-                LauncherWallpaperCapture.startMotionWatch()
-            }
+            startTickerIfNeeded()
+            LauncherWallpaperCapture.startMotionWatch()
         }
     }
 
@@ -177,14 +179,14 @@ object LiveBlurEngine {
     }
 
     fun onTransitionStarted(durationMs: Long = 1200L) = onMainThread {
-        if (isEditing || isAppLaunchInProgress || !isResumed) return@onMainThread
+        if (isAppLaunchInProgress || !isResumed) return@onMainThread
         // A previous app's completion must not cancel a newer return animation.
         transitionRefreshUntilMs = maxOf(transitionRefreshUntilMs, SystemClock.uptimeMillis() + durationMs)
         startTickerIfNeeded()
     }
 
     fun onTransitionFinished() = onMainThread {
-        if (isEditing || isAppLaunchInProgress || !isResumed) return@onMainThread
+        if (isAppLaunchInProgress || !isResumed) return@onMainThread
         onTransitionStarted(600L)
         IconGlassHook.invalidateActiveIcons()
     }
@@ -193,7 +195,7 @@ object LiveBlurEngine {
         override fun run() {
             val now = SystemClock.uptimeMillis()
             val isTransitioning = now < transitionRefreshUntilMs
-            if (isEditing || !workspaceVisible() || !PrefsHelper.enabled || !hasLiveBlurWork() ||
+            if (!workspaceVisible() || !PrefsHelper.enabled || !hasLiveBlurWork() ||
                 PrefsHelper.blurMode != SettingsProvider.BLUR_MODE_LIVE) {
                 isTickerRunning.set(false)
                 isMoving = false
@@ -207,7 +209,7 @@ object LiveBlurEngine {
 
             if (PrefsHelper.idlePause && !isCurrentlyMoving) {
                 if (isMoving) {
-                    GlassLogger.i(TAG, "Screen idle -> Live blur paused (0% CPU / battery save)")
+                    GlassLogger.i(TAG, "Screen idle -> Live blur ticker paused")
                 }
                 isMoving = false
                 isTickerRunning.set(false)
@@ -220,10 +222,11 @@ object LiveBlurEngine {
             // New wallpaper publications request their own frame. A timer must
             // not manufacture 60 redundant traversals/s for a stationary touch.
 
-            // Schedule next frame strictly according to target FPS (1 to 60)
-            val fps = PrefsHelper.liveFps.coerceIn(1, 60)
-            val intervalMs = (1000L / fps).coerceAtLeast(16L)
-            mainHandler.postDelayed(this, intervalMs)
+            // This runnable only checks whether activity has settled; it does
+            // not render a frame. Actual sampling is driven by pre-draw and
+            // wallpaper publications, so polling it at 60 Hz wastes UI-thread
+            // wakeups without improving animation cadence.
+            mainHandler.postDelayed(this, 100L)
         }
     }
 
@@ -232,21 +235,19 @@ object LiveBlurEngine {
             mainHandler.post { startTickerIfNeeded() }
             return
         }
-        if (isEditing || !workspaceVisible() ||
+        if (!workspaceVisible() ||
             !PrefsHelper.enabled || !hasLiveBlurWork() || PrefsHelper.blurMode != SettingsProvider.BLUR_MODE_LIVE) {
             return
         }
 
         val fps = PrefsHelper.liveFps.coerceIn(1, 60)
-        val intervalMs = (1000L / fps).coerceAtLeast(16L)
-
         if (isTickerRunning.compareAndSet(false, true)) {
             if (!isMoving) {
-                GlassLogger.i(TAG, "Motion detected -> Live blur resumed @ ${fps} FPS")
+                GlassLogger.i(TAG, "Motion detected -> live blur activity check resumed (sampling limit ${fps} FPS)")
             }
             isMoving = true
             mainHandler.removeCallbacks(tickerRunnable)
-            mainHandler.postDelayed(tickerRunnable, intervalMs)
+            mainHandler.postDelayed(tickerRunnable, 100L)
         }
     }
 

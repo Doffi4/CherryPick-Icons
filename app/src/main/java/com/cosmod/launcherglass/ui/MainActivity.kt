@@ -34,6 +34,9 @@ import com.google.android.material.color.DynamicColors
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 import com.google.android.material.R as M
@@ -71,6 +74,11 @@ class MainActivity : AppCompatActivity() {
     private var updatingUi = false
     private val refreshers = mutableListOf<() -> Unit>()
     private val toggleViews = mutableListOf<Pair<SquareAction,String>>()
+    private val switches = mutableListOf<Pair<MaterialSwitch,String>>()
+    private val md3Resets = mutableListOf<Pair<View,List<String>>>()
+    /** Experimental standard Material 3 interface; the classic interface stays the default. */
+    private var md3 = false
+    private fun md3Requested() = bool(SettingsProvider.KEY_DEVELOPER_MODE) && bool(SettingsProvider.KEY_MD3_UI)
     private val cancelHolds = mutableListOf<() -> Unit>()
     private val primary get() = color(M.attr.colorPrimary)
     private val onSurface get() = color(M.attr.colorOnSurface)
@@ -145,6 +153,7 @@ class MainActivity : AppCompatActivity() {
                 button.glyph.imageTintList=ColorStateList.valueOf(color(if(bool(key))M.attr.colorOnPrimaryContainer else M.attr.colorOnSurfaceVariant))
                 button.backgroundTintList=ColorStateList.valueOf(color(if(bool(key)) M.attr.colorPrimaryContainer else M.attr.colorSurfaceContainerHigh))
             }
+            switches.forEach { (view,key) -> if(view.isChecked!=bool(key))view.isChecked=bool(key) }
             refreshers.forEach { it() }
         } finally { updatingUi=false }
         updateGates()
@@ -197,9 +206,17 @@ class MainActivity : AppCompatActivity() {
         view.performHapticFeedback(if (tick) HapticFeedbackConstants.CLOCK_TICK else HapticFeedbackConstants.CONFIRM)
     }
     private fun card(content: View, inner: Boolean = false): MaterialCardView = MaterialCardView(this).apply {
-        radius = dp(if (inner) 20 else 28).toFloat()
-        cardElevation = 0f; strokeWidth = 0
-        setCardBackgroundColor(color(if (inner) M.attr.colorSurfaceContainerHigh else M.attr.colorSurfaceContainerLow))
+        cardElevation = 0f
+        if (md3) {
+            // Filled card for sections, outlined card for nested groups: no stacked tinted surfaces.
+            radius = dp(if (inner) 12 else 16).toFloat()
+            if (inner) { strokeWidth = dp(1); strokeColor = color(M.attr.colorOutlineVariant); setCardBackgroundColor(Color.TRANSPARENT) }
+            else { strokeWidth = 0; setCardBackgroundColor(color(M.attr.colorSurfaceContainer)) }
+        } else {
+            radius = dp(if (inner) 20 else 28).toFloat()
+            strokeWidth = 0
+            setCardBackgroundColor(color(if (inner) M.attr.colorSurfaceContainerHigh else M.attr.colorSurfaceContainerLow))
+        }
         addView(content)
     }
     private fun divider(parent: LinearLayout) {
@@ -237,6 +254,21 @@ class MainActivity : AppCompatActivity() {
             view.isEnabled = allowed && changed
             view.alpha = if (allowed && !changed) .65f else 1f
         }
+        md3Resets.forEach { (view, keys) ->
+            var ancestor = view.parent as? View
+            var allowed = true
+            while (ancestor != null && ancestor !== page) {
+                val node = ancestor ?: break
+                if (!node.isEnabled) { allowed = false; break }
+                ancestor = node.parent as? View
+            }
+            val changed = keys.any { key ->
+                val default = SettingsDefaults.value(key)
+                if (default is Boolean) bool(key) != default else number(key) != default
+            }
+            view.isEnabled = allowed && changed
+            view.visibility = if (changed) View.VISIBLE else View.GONE
+        }
     }
     private fun save(key: String, value: Any) {
         if(updatingUi)return
@@ -249,6 +281,115 @@ class MainActivity : AppCompatActivity() {
         contentResolver.notifyChange(SettingsProvider.CONTENT_URI, null)
         updateGates();updateStatus()
         if(key==FolderSettingsKeys.OWN || key==SettingsProvider.KEY_DEVELOPER_MODE)refreshControls()
+        if(md3!=md3Requested())rebuildPage()
+    }
+    /** Rebuilds the page after the interface style changes, keeping the scroll position. */
+    private fun rebuildPage() {
+        val y=currentScroll?.scrollY ?: 0
+        page.post {
+            if(isFinishing || isDestroyed || md3==md3Requested())return@post
+            showPage(false)
+            currentScroll?.let { scroll -> scroll.post { scroll.scrollTo(0,y) } }
+        }
+    }
+    private fun resetToDefaults(keys: List<String>) {
+        val editor=prefs.edit()
+        keys.forEach { item -> when(val value=SettingsDefaults.value(item)) {
+            is Boolean -> editor.putBoolean(item,value)
+            is Int -> editor.putInt(item,value)
+        } }
+        editor.apply()
+        contentResolver.notifyChange(SettingsProvider.CONTENT_URI,null)
+        refreshControls()
+        if(md3!=md3Requested())rebuildPage()
+    }
+    private fun showLanguageDialog(view: View) {
+        MaterialAlertDialogBuilder(this).setTitle(getString(R.string.ui_language))
+            .setSingleChoiceItems(arrayOf("Русский","English"),if(UiLanguage.tag(this)=="ru")0 else 1) { dialog,index ->
+                haptic(view);UiLanguage.choose(this,if(index==0)"ru" else "en");dialog.dismiss();recreate()
+            }.setNegativeButton(getString(R.string.ui_close),null).show()
+    }
+    // Material 3 counterparts. Each helper keeps the classic component unless the experimental interface is active.
+    private fun toggle(label: String, key: String): View = if (!md3) makeSwitch(label, key) else MaterialSwitch(this).apply {
+        isChecked = bool(key); contentDescription = label
+        setOnCheckedChangeListener { view, checked -> if (!updatingUi) { haptic(view); save(key, checked) } }
+        switches.add(this to key)
+    }
+    private fun reset(key: String): View = if (!md3) resetButton(key) else md3Reset(key)
+    private fun md3Reset(key: String): View {
+        val keys = resetKeys(key)
+        return AppCompatImageButton(this).apply {
+            setImageResource(R.drawable.ic_restart); contentDescription = getString(R.string.ui_reset_defaults)
+            imageTintList = ColorStateList.valueOf(secondaryText)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = RippleDrawable(ColorStateList.valueOf(((primary and 0x00ffffff) or 0x20000000)), null,
+                GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) })
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+            setOnClickListener { view ->
+                haptic(view)
+                MaterialAlertDialogBuilder(this@MainActivity).setTitle(getString(R.string.ui_reset_defaults))
+                    .setMessage(getString(R.string.ui_reset_confirm))
+                    .setNegativeButton(getString(R.string.ui_cancel), null)
+                    .setPositiveButton(getString(R.string.ui_reset)) { _, _ -> haptic(view); resetToDefaults(keys) }
+                    .show()
+            }
+            md3Resets.add(this to keys)
+        }
+    }
+    private fun actions(views: List<View>): View = if (!md3) ConnectedActions(this, views) else row().apply {
+        views.forEach { view ->
+            val width = view.layoutParams?.width?.takeIf { it > 0 } ?: ViewGroup.LayoutParams.WRAP_CONTENT
+            addView(view, LinearLayout.LayoutParams(width, dp(48)).apply { marginStart = dp(4) })
+        }
+    }
+    private fun rowRipple(view: View) {
+        val value = android.util.TypedValue()
+        if (theme.resolveAttribute(android.R.attr.selectableItemBackground, value, true)) view.setBackgroundResource(value.resourceId)
+    }
+    private fun md3Header(): View = MaterialToolbar(this).apply {
+        title = if (settingsPage) getString(R.string.ui_settings) else "CherryPick Icons"
+        setTitleTextAppearance(context, M.style.TextAppearance_Material3_TitleLarge)
+        setTitleTextColor(onSurface)
+        minimumHeight = dp(64)
+        if (settingsPage) {
+            setNavigationIcon(R.drawable.ic_arrow_back)
+            navigationIcon?.mutate()?.setTint(onSurface)
+            navigationContentDescription = getString(R.string.ui_back)
+            setNavigationOnClickListener { haptic(it); settingsPage = false; showPage() }
+        }
+        val item = if (settingsPage) menu.add(0, 1, 0, getString(R.string.ui_language)).setIcon(R.drawable.ic_language)
+            else menu.add(0, 2, 0, getString(R.string.ui_settings)).setIcon(R.drawable.ic_settings)
+        item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        item.icon?.mutate()?.setTint(secondaryText)
+        setOnMenuItemClickListener { menuItem ->
+            haptic(this)
+            if (menuItem.itemId == 1) showLanguageDialog(this) else { settingsPage = true; showPage() }
+            true
+        }
+    }
+    private fun md3RestartButton(scroll: androidx.core.widget.NestedScrollView): View = ExtendedFloatingActionButton(this).apply {
+        text = getString(R.string.ui_restart_launcher); isAllCaps = false
+        setIconResource(R.drawable.ic_restart)
+        setOnClickListener { haptic(it); restart(it) }
+        scroll.setOnScrollChangeListener(androidx.core.widget.NestedScrollView.OnScrollChangeListener { _, _, y, _, oldY ->
+            if (y > oldY + dp(4)) shrink() else if (y < oldY - dp(4)) extend()
+        })
+    }
+    private fun md3SwitchRow(label: String, key: String, subtitle: String?, expanded: Boolean, onExpand: ((Boolean) -> Unit)?): LinearLayout {
+        val wrapper = column()
+        val line = row().apply { setPadding(dp(16), dp(8), dp(8), dp(8)); minimumHeight = dp(if (subtitle != null) 72 else 56) }
+        val labels = column()
+        add(labels, text(label, 16f, bold = key == SettingsProvider.KEY_ENABLED))
+        if (subtitle != null) add(labels, text(subtitle, 14f, true), 4)
+        line.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
+        val toggle = toggle(label, key)
+        val chevron = onExpand?.let { expandButton(expanded, label, it) }
+        line.addView(actions(listOfNotNull(reset(key), chevron, toggle)))
+        add(wrapper, line)
+        rowRipple(line)
+        line.contentDescription = if (subtitle != null) "$label. $subtitle" else label
+        line.setOnClickListener { (chevron ?: toggle).performClick() }
+        return wrapper
     }
 
     private fun iconButton(icon: Int, label: String, filled: Boolean = false, action: (View) -> Unit): View {
@@ -272,22 +413,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPage(animate: Boolean = true) {
         cancelHolds.toList().forEach { it() };cancelHolds.clear()
-        gates.clear(); resets.clear();refreshers.clear();toggleViews.clear();statusText = null; statusDot = null
+        gates.clear(); resets.clear();refreshers.clear();toggleViews.clear();switches.clear();md3Resets.clear();statusText = null; statusDot = null
+        md3 = md3Requested()
+        if (md3) Md3Guard.install(applicationContext)
         page.removeAllViews()
         val shell = column()
-        val header = row().apply { setPadding(dp(20), dp(12), dp(20), dp(12)) }
-        if (settingsPage) header.addView(iconButton(R.drawable.ic_arrow_back,getString(R.string.ui_back)) { settingsPage=false;showPage() })
-        header.addView(text("CherryPick Icons",21f,bold=true).apply {
-            gravity=Gravity.START;maxLines=1;setPadding(if(settingsPage)dp(12) else 0,0,dp(12),0)
-        },LinearLayout.LayoutParams(0,-2,1f))
-        if(settingsPage) header.addView(iconButton(R.drawable.ic_language,getString(R.string.ui_language)) { view ->
-            MaterialAlertDialogBuilder(this).setTitle(getString(R.string.ui_language))
-                .setSingleChoiceItems(arrayOf("Русский","English"),if(UiLanguage.tag(this)=="ru")0 else 1) { dialog,index ->
-                    haptic(view);UiLanguage.choose(this,if(index==0)"ru" else "en");dialog.dismiss();recreate()
-                }.setNegativeButton(getString(R.string.ui_close),null).show()
-        })
-        if (!settingsPage) header.addView(iconButton(R.drawable.ic_settings,getString(R.string.ui_settings)) { settingsPage=true;showPage() })
-        add(shell, header)
+        if (md3) add(shell, md3Header()) else {
+            val header = row().apply { setPadding(dp(20), dp(12), dp(20), dp(12)) }
+            if (settingsPage) header.addView(iconButton(R.drawable.ic_arrow_back,getString(R.string.ui_back)) { settingsPage=false;showPage() })
+            header.addView(text("CherryPick Icons",21f,bold=true).apply {
+                gravity=Gravity.START;maxLines=1;setPadding(if(settingsPage)dp(12) else 0,0,dp(12),0)
+            },LinearLayout.LayoutParams(0,-2,1f))
+            if(settingsPage) header.addView(iconButton(R.drawable.ic_language,getString(R.string.ui_language)) { view -> showLanguageDialog(view) })
+            if (!settingsPage) header.addView(iconButton(R.drawable.ic_settings,getString(R.string.ui_settings)) { settingsPage=true;showPage() })
+            add(shell, header)
+        }
         val scroll = androidx.core.widget.NestedScrollView(this).apply { isFillViewport = true; clipToPadding = false }
         currentScroll = scroll
         val body = column().apply { setPadding(dp(20), dp(12), dp(20), dp(24)) }
@@ -299,7 +439,10 @@ class MainActivity : AppCompatActivity() {
             // A floating button protects only its own bounds; content continues
             // behind it instead of reserving a full-width bottom strip.
             body.setPadding(dp(20),dp(12),dp(20),dp(108))
-            page.addView(restartButton(),FrameLayout.LayoutParams(dp(64),dp(64),Gravity.BOTTOM or Gravity.START).apply {
+            if (md3) page.addView(md3RestartButton(scroll),FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.END).apply {
+                marginEnd=dp(16);bottomMargin=dp(16)
+            })
+            else page.addView(restartButton(),FrameLayout.LayoutParams(dp(64),dp(64),Gravity.BOTTOM or Gravity.START).apply {
                 marginStart=dp(24);bottomMargin=dp(20)
             })
         }
@@ -319,7 +462,7 @@ class MainActivity : AppCompatActivity() {
         statusHint=text("",12f,true).apply { visibility=View.GONE }
         add(statusLabels,statusHint!!,6)
         status.addView(statusLabels,LinearLayout.LayoutParams(0,-2,1f))
-        status.addView(ConnectedActions(this,listOf(resetButton(SettingsProvider.KEY_ENABLED),makeSwitch(getString(R.string.ui_module),SettingsProvider.KEY_ENABLED))))
+        status.addView(actions(listOf(reset(SettingsProvider.KEY_ENABLED),toggle(getString(R.string.ui_module),SettingsProvider.KEY_ENABLED))))
         add(body,card(status),bottom=24)
         val warning=column().apply {setPadding(dp(20),dp(16),dp(20),dp(16))}
         add(warning,text(getString(R.string.ui_flux_only_title),16f,bold=true).apply {
@@ -590,7 +733,7 @@ class MainActivity : AppCompatActivity() {
         previewRow.addView(preview,LinearLayout.LayoutParams(dp(64),dp(64)))
         val previewLabel=text("",13f,true).apply { setPadding(dp(16),0,dp(8),0) }
         previewRow.addView(previewLabel,LinearLayout.LayoutParams(0,-2,1f))
-        previewRow.addView(ConnectedActions(this,listOf(resetButton(SettingsProvider.KEY_COLOR_MODE))))
+        previewRow.addView(actions(listOf(reset(SettingsProvider.KEY_COLOR_MODE))))
         add(details,previewRow,4,16)
         val appearances=com.google.android.material.button.MaterialButtonToggleGroup(this).apply {
             isSingleSelection=true;isSelectionRequired=true
@@ -661,14 +804,17 @@ class MainActivity : AppCompatActivity() {
         expanded: Boolean, onExpand: (Boolean) -> Unit, headerAllowed: () -> Boolean,
         contentAllowed: () -> Boolean, content: (LinearLayout) -> Unit) {
         val group = column()
-        val header = row().apply { setPadding(dp(20),dp(16),dp(16),dp(16)); minimumHeight = dp(80) }
+        val header = row().apply {
+            if (md3) { setPadding(dp(16),dp(12),dp(8),dp(12)); minimumHeight = dp(72) }
+            else { setPadding(dp(20),dp(16),dp(16),dp(16)); minimumHeight = dp(80) }
+        }
         val titleArea = row()
         val labels = column()
-        add(labels, text(title, 19f, bold = true))
+        add(labels, if (md3) text(title, 22f) else text(title, 19f, bold = true))
         titleArea.addView(labels, LinearLayout.LayoutParams(0,-2,1f))
         titleArea.contentDescription = "$title, ${if(expanded) getString(R.string.ui_collapse) else getString(R.string.ui_expand)}"
         header.addView(titleArea, LinearLayout.LayoutParams(0,-2,1f))
-        val toggle = makeSwitch(title, key)
+        val toggle = toggle(title, key)
         add(group, header)
         val children = column().apply { setPadding(dp(8),0,dp(8),dp(12)); visibility = if (expanded) View.VISIBLE else View.GONE }
         add(group, children)
@@ -682,7 +828,7 @@ class MainActivity : AppCompatActivity() {
             reveal(children,open)
             titleArea.contentDescription = "$title, ${if(open) getString(R.string.ui_collapse) else getString(R.string.ui_expand)}"
         }
-        header.addView(ConnectedActions(this,listOf(resetButton(key),toggle,chevron)))
+        header.addView(actions(if (md3) listOf(reset(key),chevron,toggle) else listOf(reset(key),toggle,chevron)))
         titleArea.setOnClickListener { chevron.performClick() }
         titleArea.isFocusable = true
         add(parent, sectionCard, bottom = 12)
@@ -766,16 +912,9 @@ class MainActivity : AppCompatActivity() {
                 (button.parent as? ConnectedActions)?.hold(button,progress)
                 if(progress>=1f) {
                     holding=false;completed=true
-                    val editor=prefs.edit()
-                    keys.forEach { item -> when(val value=SettingsDefaults.value(item)) {
-                        is Boolean -> editor.putBoolean(item,value)
-                        is Int -> editor.putInt(item,value)
-                    } }
-                    editor.apply()
-                    contentResolver.notifyChange(SettingsProvider.CONTENT_URI,null)
                     // Synchronize the existing views. Never detach or fade the
                     // page: that caused the whole interface to blink on reset.
-                    refreshControls()
+                    resetToDefaults(keys)
                     haptic(button)
                     button.glyph.animate().rotation(-720f).setDuration(198).setInterpolator(CherryMotion)
                         .withEndAction { button.glyph.rotation=0f }.start()
@@ -808,6 +947,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun switchRow(label: String, key: String, subtitle: String? = null,
         expanded: Boolean = false, onExpand: ((Boolean) -> Unit)? = null): LinearLayout {
+        if (md3) return md3SwitchRow(label, key, subtitle, expanded, onExpand)
         val wrapper = column()
         val line = row().apply { setPadding(dp(16),dp(12),dp(8),dp(12)); minimumHeight = dp(72) }
         val labels = column()
@@ -832,17 +972,18 @@ class MainActivity : AppCompatActivity() {
         var open = expanded
         val arrow = AppCompatImageView(this).apply {
             setImageResource(R.drawable.ic_expand_more)
-            imageTintList=ColorStateList.valueOf(color(M.attr.colorOnSecondaryContainer))
+            imageTintList=ColorStateList.valueOf(if(md3)secondaryText else color(M.attr.colorOnSecondaryContainer))
             rotation=if(open)-180f else 0f
             importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         return FrameLayout(this).apply {
-            layoutParams=LinearLayout.LayoutParams(dp(40),dp(48)).apply { leftMargin=dp(4) }
-            val shape=GradientDrawable().apply {
+            layoutParams=LinearLayout.LayoutParams(dp(if(md3)48 else 40),dp(48)).apply { leftMargin=dp(4) }
+            background=if(md3) RippleDrawable(ColorStateList.valueOf(((primary and 0x00ffffff) or 0x20000000)),null,
+                GradientDrawable().apply { shape=GradientDrawable.OVAL; setColor(Color.WHITE) })
+            else RippleDrawable(ColorStateList.valueOf(((primary and 0x00ffffff) or 0x20000000)),GradientDrawable().apply {
                 setColor(color(M.attr.colorSecondaryContainer))
                 cornerRadius=dp(12).toFloat()
-            }
-            background=RippleDrawable(ColorStateList.valueOf(((primary and 0x00ffffff) or 0x20000000)),shape,null)
+            },null)
             addView(arrow,FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER))
             isFocusable=true
             contentDescription="$label, ${if(open) getString(R.string.ui_collapse) else getString(R.string.ui_expand)}"
@@ -991,12 +1132,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildSettings(body: LinearLayout) {
-        add(body,text(getString(R.string.ui_settings),30f,bold=true),top=8,bottom=8)
+        if(!md3)add(body,text(getString(R.string.ui_settings),30f,bold=true),top=8,bottom=8)
         add(body,text(getString(R.string.ui_blur_update),14f,true),bottom=24)
         val modes = column().apply { setPadding(dp(20),dp(20),dp(20),dp(12)) }
         val modeHeader = row()
         modeHeader.addView(text(getString(R.string.ui_blur_mode),18f,bold=true),LinearLayout.LayoutParams(0,-2,1f))
-        modeHeader.addView(resetButton(SettingsProvider.KEY_BLUR_MODE))
+        modeHeader.addView(reset(SettingsProvider.KEY_BLUR_MODE))
         add(modes,modeHeader,bottom=12)
         val radioGroup = RadioGroup(this)
         val selected = number(SettingsProvider.KEY_BLUR_MODE)
@@ -1026,6 +1167,14 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.ui_energy_saving_description)))
         gate(idle) { blur() && number(SettingsProvider.KEY_BLUR_MODE)==SettingsProvider.BLUR_MODE_LIVE }
         add(body,idle,bottom=24)
+        val bootRestart=column()
+        add(bootRestart,switchRow(getString(R.string.ui_boot_restart),SettingsProvider.KEY_BOOT_RESTART))
+        add(bootRestart,text(getString(R.string.ui_boot_restart_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(12))})
+        divider(bootRestart)
+        val bootToast=switchRow(getString(R.string.ui_boot_restart_toast),SettingsProvider.KEY_BOOT_RESTART_TOAST)
+        gate(bootToast){bool(SettingsProvider.KEY_BOOT_RESTART)}
+        add(bootRestart,bootToast)
+        add(body,card(bootRestart),bottom=12)
         val developer=column()
         add(developer,switchRow(getString(R.string.ui_developer_mode),SettingsProvider.KEY_DEVELOPER_MODE))
         val developerOptions=column()
@@ -1048,6 +1197,12 @@ class MainActivity : AppCompatActivity() {
         divider(developerOptions)
         add(developerOptions,switchRow(getString(R.string.ui_optimize_mini_icons),SettingsProvider.KEY_OPTIMIZE_MINI_ICONS))
         add(developerOptions,text(getString(R.string.ui_optimize_mini_icons_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
+        divider(developerOptions)
+        add(developerOptions,switchRow(getString(R.string.ui_lifted_backdrop),SettingsProvider.KEY_LIFTED_BACKDROP))
+        add(developerOptions,text(getString(R.string.ui_lifted_backdrop_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
+        divider(developerOptions)
+        add(developerOptions,switchRow(getString(R.string.ui_md3_interface),SettingsProvider.KEY_MD3_UI))
+        add(developerOptions,text(getString(R.string.ui_md3_interface_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
         developerOptions.visibility=if(bool(SettingsProvider.KEY_DEVELOPER_MODE))View.VISIBLE else View.GONE
         refreshers.add {developerOptions.visibility=if(bool(SettingsProvider.KEY_DEVELOPER_MODE))View.VISIBLE else View.GONE}
         gate(developerOptions){bool(SettingsProvider.KEY_DEVELOPER_MODE)}
@@ -1183,6 +1338,26 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this,if(success)getString(R.string.ui_launcher_restarted) else getString(R.string.ui_launcher_restart_error),Toast.LENGTH_SHORT).show()
             }
         },"CherryPickRestart").start()
+    }
+    /**
+     * The experimental interface must never lock the user out of the settings: any crash while it is
+     * active switches it off, so the next launch opens the classic interface.
+     */
+    private class Md3Guard(private val context: Context, private val previous: Thread.UncaughtExceptionHandler?) :
+        Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(thread: Thread, error: Throwable) {
+            try {
+                context.getSharedPreferences(SettingsProvider.PREFS_NAME, MODE_PRIVATE).edit()
+                    .putBoolean(SettingsProvider.KEY_MD3_UI, false).commit()
+            } catch (_: Throwable) {}
+            previous?.uncaughtException(thread, error)
+        }
+        companion object {
+            fun install(context: Context) {
+                val current = Thread.getDefaultUncaughtExceptionHandler()
+                if (current !is Md3Guard) Thread.setDefaultUncaughtExceptionHandler(Md3Guard(context, current))
+            }
+        }
     }
     /** Replaced by the LSPosed activation hook. */
     @Keep fun isModuleActive(): Boolean = false

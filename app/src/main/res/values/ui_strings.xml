@@ -92,6 +92,14 @@
     <string name="ui_optimize_mini_icons">Folder mini-icons: 30 FPS</string>
     <string name="ui_optimize_mini_icons_hint">Limits small icons in 1×1 folders and tiny previews in large folders to 30 FPS. Blur and refraction stay enabled. Large icons follow the global blur limit; limits below 30 FPS also apply to miniatures.</string>
     <string name="ui_color_depth_bits">Color depth</string>
+    <string name="ui_lifted_backdrop">Live backdrop under dragged items (experimental)</string>
+    <string name="ui_lifted_backdrop_hint">Off by default and not verified on devices. While an icon or folder is dragged, its glass blurs the launcher layers below it, not only the wallpaper (photo widgets keep the wallpaper blur). If the launcher stops during a drag, the effect is switched off until the next reboot or module update. Turn it off if dragging becomes unstable; restart the launcher afterwards to remove its observers completely.</string>
+    <string name="ui_md3_interface">Material 3 interface (experimental)</string>
+    <string name="ui_md3_interface_hint">Standard Material 3 layout for this settings app: top app bar, list rows with switches and supporting text, reset with confirmation. Changes only this screen; the classic interface stays the default. Active while developer mode is on; if the app crashes with it, it switches itself off.</string>
+    <string name="ui_reset_defaults">Reset to defaults</string>
+    <string name="ui_reset_confirm">Settings of this group will return to their default values.</string>
+    <string name="ui_reset">Reset</string>
+    <string name="ui_cancel">Cancel</string>
     <string name="ui_disable_edge_optimization">Disable icon edge optimization</string>
     <string name="ui_disable_edge_optimization_hint">Force icon blur updates at and beyond the screen edges during motion.</string>
     <string name="ui_color_depth_hint">Limits color levels at the selected processing stage. 24 bits preserves full color; 8 bits gives strong color bands (RGB 3:3:2).</string>
@@ -114,4 +122,9 @@
     <string name="ui_settings_exported">Settings exported</string>
     <string name="ui_settings_transfer_error">Could not transfer settings: %1$s</string>
     <string name="ui_file_picker_error">No file picker available</string>
+    <string name="ui_boot_restart">Restart launcher after reboot</string>
+    <string name="ui_boot_restart_hint">Once per boot, after the first unlock within 15 minutes of a reboot, while the module is enabled. Ordinary unlocks never restart the launcher; if the system delays the boot event past that window, the restart is skipped.</string>
+    <string name="ui_boot_restart_toast">Show restart message</string>
+    <string name="ui_boot_restart_message">Restarting the launcher after unlock for CherryPick Icons.</string>
+    <string name="ui_boot_restart_failed">Could not restart the launcher after startup.</string>
 </resources>

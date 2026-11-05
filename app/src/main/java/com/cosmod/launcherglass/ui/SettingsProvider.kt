@@ -63,6 +63,7 @@ class SettingsProvider : ContentProvider() {
                 bundle.putBoolean(KEY_HAZE_ENABLED,prefs.getBoolean(KEY_HAZE_ENABLED,false))
                 bundle.putBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,prefs.getBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,SettingsDefaults.boolean(KEY_DISABLE_EDGE_OPTIMIZATION)))
                 bundle.putBoolean(KEY_OPTIMIZE_MINI_ICONS,prefs.getBoolean(KEY_OPTIMIZE_MINI_ICONS,SettingsDefaults.boolean(KEY_OPTIMIZE_MINI_ICONS)))
+                bundle.putBoolean(KEY_LIFTED_BACKDROP,prefs.getBoolean(KEY_LIFTED_BACKDROP,SettingsDefaults.boolean(KEY_LIFTED_BACKDROP)))
                 bundle.putInt(KEY_NATIVE_FLUX_SUPPORT,prefs.getInt(KEY_NATIVE_FLUX_SUPPORT,0))
                 if (prefs.contains(KEY_NATIVE_ICON_DARK)) bundle.putBoolean(KEY_NATIVE_ICON_DARK, prefs.getBoolean(KEY_NATIVE_ICON_DARK, false))
                 bundle.putInt(KEY_LIGHT_HUE, prefs.getInt(KEY_LIGHT_HUE, SettingsDefaults.integer(KEY_LIGHT_HUE)))
@@ -129,6 +130,7 @@ class SettingsProvider : ContentProvider() {
                     if(b.containsKey(KEY_HAZE_ENABLED))editor.putBoolean(KEY_HAZE_ENABLED,b.getBoolean(KEY_HAZE_ENABLED))
                     if(b.containsKey(KEY_DISABLE_EDGE_OPTIMIZATION))editor.putBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,b.getBoolean(KEY_DISABLE_EDGE_OPTIMIZATION))
                     if(b.containsKey(KEY_OPTIMIZE_MINI_ICONS))editor.putBoolean(KEY_OPTIMIZE_MINI_ICONS,b.getBoolean(KEY_OPTIMIZE_MINI_ICONS))
+                    if(b.containsKey(KEY_LIFTED_BACKDROP))editor.putBoolean(KEY_LIFTED_BACKDROP,b.getBoolean(KEY_LIFTED_BACKDROP))
                     if (b.containsKey(KEY_LIGHT_HUE)) editor.putInt(KEY_LIGHT_HUE, b.getInt(KEY_LIGHT_HUE))
                     if (b.containsKey(KEY_LIGHT_SATURATION)) editor.putInt(KEY_LIGHT_SATURATION, b.getInt(KEY_LIGHT_SATURATION))
                     if (b.containsKey(KEY_LIGHT_BRIGHTNESS)) editor.putInt(KEY_LIGHT_BRIGHTNESS, b.getInt(KEY_LIGHT_BRIGHTNESS))
@@ -220,6 +222,8 @@ class SettingsProvider : ContentProvider() {
         const val KEY_COLOR_SATURATION = "color_saturation"
         const val KEY_COLOR_BRIGHTNESS = "color_brightness"
 
+        const val KEY_BOOT_RESTART = "boot_restart"
+        const val KEY_BOOT_RESTART_TOAST = "boot_restart_toast"
         const val KEY_ENABLED = "enabled"
         const val KEY_DEVELOPER_MODE = "developer_mode"
         const val KEY_GPU_EFFECTS = "gpu_effects"
@@ -231,6 +235,9 @@ class SettingsProvider : ContentProvider() {
         const val KEY_HAZE_ENABLED = "glass_haze_enabled"
         const val KEY_DISABLE_EDGE_OPTIMIZATION = "disable_edge_optimization"
         const val KEY_OPTIMIZE_MINI_ICONS = "optimize_folder_mini_icons"
+        const val KEY_LIFTED_BACKDROP = "lifted_backdrop"
+        /** Local UI preference of the settings app; never sent to the launcher or exported in presets. */
+        const val KEY_MD3_UI = "ui_md3"
         const val KEY_PHOTO_WIDGET_TINT = "photo_widget_tint"
         const val KEY_PHOTO_WIDGET_LIQUID_WIDTH = "photo_widget_liquid_width"
         const val KEY_PHOTO_WIDGET_LIQUID_DISTORTION = "photo_widget_liquid_distortion"
