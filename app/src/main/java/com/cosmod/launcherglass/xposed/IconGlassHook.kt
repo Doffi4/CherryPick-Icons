@@ -627,15 +627,20 @@ object IconGlassHook {
     }
     fun init(lpparam:LoadPackageParam) {
         val loader=lpparam.classLoader
-        NativeSurfaceLive.install(loader)
-        DragPreviewMaterial.install(loader)
-        FolderMaterialHook.install(loader)
-        LiftedBackdrop.install(loader)
-        MultiIconMaterialHook.install(loader)
-        DockMaterial.install(loader)
-        TransitionCapture.install(loader)
-        ForeignDraw.install(loader)
-        PhotoWidgetMaterial.install(loader)
+        for((name,install) in listOf<Pair<String,()->Unit>>(
+            "NativeSurface" to {NativeSurfaceLive.install(loader)},
+            "DragPreview" to {DragPreviewMaterial.install(loader)},
+            "Folders" to {FolderMaterialHook.install(loader)},
+            "LiftedBackdrop" to {LiftedBackdrop.install(loader)},
+            "MultiIcons" to {MultiIconMaterialHook.install(loader)},
+            "Dock" to {DockMaterial.install(loader)},
+            "Transition" to {TransitionCapture.install(loader)},
+            "ForeignDraw" to {ForeignDraw.install(loader)},
+            "PhotoWidget" to {PhotoWidgetMaterial.install(loader)}
+        ))try {
+            install()
+            GlassLogger.i("Compat","$name setup completed")
+        }catch(t:Throwable){GlassLogger.e("Compat","$name setup failed; remaining features continue",t)}
         // Carry the source view through native asynchronous icon preparation.
         // The anchor belongs to this load request, never to a global last click.
         val modernLoader=XposedHelpers.findClassIfExists("com.android.launcher3.anim.iconsurfacemanager.loader.IconDrawableLoader",loader)

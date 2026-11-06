@@ -9,7 +9,7 @@ import de.robv.android.xposed.*
 import java.util.WeakHashMap
 import kotlin.math.abs
 
-/** OxygenOS Launcher 16.6.8: Flux's plate and logo are two independently animated bitmaps. */
+/** Flux's plate and logo may be two independently animated bitmaps. */
 internal object Oxygen16IconSupport {
     private var configured=false
     private var type:Class<*>?=null
@@ -22,15 +22,12 @@ internal object Oxygen16IconSupport {
         if(configured)return
         configured=true
         val version=try {context.packageManager.getPackageInfo(context.packageName,0).versionName}catch(_:Throwable){null}
-        // Deliberately keep all previously supported launcher versions on their existing path.
-        if(version!="16.6.8")return
         val native=XposedHelpers.findClassIfExists("com.android.launcher3.icons.FastBitmapDrawable",context.classLoader) ?: return
-        val method=try {
-            if(native.getDeclaredField("mSubLayerBitmap").type!=Bitmap::class.java ||
-                native.getDeclaredField("mPaintSubLayer").type!=Paint::class.java)return
-            native.getDeclaredMethod("drawSubLayerInternal",Canvas::class.java,Rect::class.java)
-        }catch(_:Throwable){return}
-        type=native
+        val method=com.cosmod.launcherglass.util.LauncherMethodResolver.splitIconMethod(native,
+            Bitmap::class.java,Paint::class.java,Canvas::class.java,Rect::class.java) ?: run {
+            GlassLogger.i("Oxygen16","Split Flux API unavailable on launcher $version; generic icons kept")
+            return
+        }
         ModuleHooks.hookMethod(method,object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
                 if(!PrefsHelper.enabled || IconGlassHook.isRecordingNative())return
@@ -55,7 +52,8 @@ internal object Oxygen16IconSupport {
                 }
             }
         })
-        GlassLogger.i("Oxygen16","Launcher 16.6.8 split Flux bitmap path selected")
+        type=native
+        GlassLogger.i("Oxygen16","Split Flux API selected on launcher $version; only flat plates with a live sub-layer are handled")
     }
     private fun subLayer(drawable:Drawable):Bitmap? {
         val native=type ?: return null

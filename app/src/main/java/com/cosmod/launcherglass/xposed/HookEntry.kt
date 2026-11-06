@@ -50,9 +50,12 @@ class HookEntry : IXposedHookLoadPackage {
                 initialized = true
                 val appCtx = context.applicationContext ?: context
                 GlassLogger.i("HookEntry", "Initializing PrefsHelper via $source (Context: $appCtx)")
+                val version=try {appCtx.packageManager.getPackageInfo(appCtx.packageName,0).versionName}catch(_:Throwable){null}
+                GlassLogger.i("Compat","Launcher=${appCtx.packageName} $version, API=${android.os.Build.VERSION.SDK_INT}, module=${com.cosmod.launcherglass.BuildConfig.VERSION_NAME}")
                 com.cosmod.launcherglass.util.WallpaperHelper.appContext = appCtx
                 IconGlassHook.appContext = appCtx
-                Oxygen16IconSupport.configure(appCtx)
+                try {Oxygen16IconSupport.configure(appCtx)}
+                catch(t:Throwable){GlassLogger.e("Compat","Split Flux setup failed; generic icon hooks kept",t)}
                 PrefsHelper.init(appCtx)
                 try {
                     val filter = android.content.IntentFilter(android.content.Intent.ACTION_WALLPAPER_CHANGED).apply {
@@ -311,6 +314,7 @@ class HookEntry : IXposedHookLoadPackage {
             try {
                 val wallpaperClass = XposedHelpers.findClassIfExists(
                     "com.android.launcher.wallpaper.LauncherWallpaperManager", lpparam.classLoader)
+                if(wallpaperClass==null)GlassLogger.i("Compat","Processed wallpaper delivery unavailable; native wallpaper capture fallback kept")
                 if (wallpaperClass != null) {
                     // In 17.3.9 this method is "u", in 17.3.12 it is "s" -> resolve dynamically by Bitmap parameter
                     val deliveryMethod = wallpaperClass.declaredMethods.firstOrNull { method ->
@@ -343,7 +347,8 @@ class HookEntry : IXposedHookLoadPackage {
                 GlassLogger.e("HookEntry", "Failed to hook processed wallpaper delivery", t)
             }
 
-            IconGlassHook.init(lpparam)
+            try {IconGlassHook.init(lpparam)}
+            catch(t:Throwable){GlassLogger.e("Compat","Icon hook setup incomplete; see failing API above",t)}
             try {
                 val config = XposedHelpers.findClassIfExists(
                     "com.android.launcher.theme.LauncherIconConfig", lpparam.classLoader)

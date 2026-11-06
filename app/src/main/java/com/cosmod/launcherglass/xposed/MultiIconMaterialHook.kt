@@ -37,8 +37,7 @@ internal object MultiIconMaterialHook {
             val sy=(info?.let {NativeIconAccess.call(it,"getSpanY")} as? Number)?.toInt() ?: 1
             if(previous!=rect || radius!=nativeRadius || spans!=sx*100+sy || geometry!=SurfaceMaterial.geometryRevision){
                 clip.reset()
-                val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",view.context.classLoader)
-                XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",clip,RectF(rect),nativeRadius,nativeRadius,sx,sy)
+                if(!NativeFolderPath.create(view,clip,RectF(rect),nativeRadius,sx,sy)){native.draw(canvas);return}
                 previous.set(rect);radius=nativeRadius;spans=sx*100+sy;geometry=SurfaceMaterial.geometryRevision
                 // The OEM contour is a function of size, radius and spans only.
                 fingerprint=SurfaceMaterial.descriptor("grid",sx,sy)

@@ -34,17 +34,7 @@ object LauncherWallpaperCapture {
         }
         if (!hasConstructor) return false
 
-        val hasStartMethod = type.declaredMethods.any { method ->
-            method.parameterTypes.size == 1 && method.parameterTypes[0].isInterface &&
-                method.parameterTypes[0].methods.any { callback -> callback.parameterTypes.any { it == Bitmap::class.java } }
-        }
-        if (!hasStartMethod) return false
-
-        val hasStopMethod = type.declaredMethods.any { method ->
-            method.parameterTypes.contentEquals(arrayOf(Boolean::class.javaPrimitiveType)) &&
-                method.returnType == java.lang.Void.TYPE
-        }
-        return hasStopMethod
+        return LauncherMethodResolver.wallpaperFactory(type,Bitmap::class.java)!=null
     }
 
     private fun findCaptureClass(context: Context): Class<*>? {
@@ -95,20 +85,16 @@ object LauncherWallpaperCapture {
         apiResolved=true
         return try {
             val type = findCaptureClass(context) ?: error("Wallpaper factory class unavailable")
-            val start=type.declaredMethods.firstOrNull { method ->
-                method.parameterTypes.size==1 && method.parameterTypes[0].isInterface &&
-                    method.parameterTypes[0].methods.any { callback -> callback.parameterTypes.any { it==Bitmap::class.java } }
-            } ?: error("Wallpaper bitmap callback unavailable")
+            val methods=LauncherMethodResolver.wallpaperFactory(type,Bitmap::class.java)
+                ?: error("Wallpaper subscription API ambiguous or unavailable")
+            val start=methods.subscribe
             val callback=start.parameterTypes[0]
-            val frame=callback.methods.first { method -> method.parameterTypes.any { it==Bitmap::class.java } }
-            val stop=type.declaredMethods.first { method ->
-                method.parameterTypes.contentEquals(arrayOf(Boolean::class.javaPrimitiveType)) &&
-                    method.returnType==Void.TYPE
-            }
+            val frame=methods.frame
+            val stop=methods.release
             start.isAccessible=true;stop.isAccessible=true
             CaptureApi(type,callback,frame.name,start,stop).also {
                 captureApi=it
-                GlassLogger.i("WallpaperCapture","Resolved native capture callback: ${callback.name} in ${type.name}")
+                GlassLogger.i("WallpaperCapture","Native capture: ${type.name}.${start.name} -> ${callback.name}.${frame.name}, release=${stop.name}")
             }
         } catch(t:Throwable) {
             GlassLogger.i("WallpaperCapture","Native capture API unavailable on this launcher: ${t.message}")

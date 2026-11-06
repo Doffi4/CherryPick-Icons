@@ -61,12 +61,13 @@ internal object TransitionCapture {
             }
         })
         // Runs on the thread that records the Picture (main executor).
-        val recorder="convertViewToBitmapInMainExecutor\$lambda\$5"
-        if(utils.declaredMethods.none {it.name==recorder}){
+        val recorder=com.cosmod.launcherglass.util.LauncherMethodResolver.snapshotRecorder(utils,View::class.java)
+        if(recorder==null){
             GlassLogger.i("Transition","Snapshot recorder unavailable; multi-icon transitions keep the software snapshot")
             return
         }
-        ModuleHooks.hookAllMethods(utils,recorder,object:XC_MethodHook(){
+        GlassLogger.i("Transition","Snapshot recorder: ${recorder.name}")
+        ModuleHooks.hookMethod(recorder,object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
                 val view=param.args.lastOrNull() as? View ?: return
                 param.setObjectExtra("priorTarget",target.get())
