@@ -41,14 +41,16 @@ class SettingsProvider : ContentProvider() {
             }
             METHOD_GET_ALL -> {
                 bundle.putBoolean(KEY_GPU_EFFECTS,prefs.getBoolean(KEY_GPU_EFFECTS,true))
-                bundle.putBoolean(FolderSettingsKeys.OWN,prefs.getBoolean(FolderSettingsKeys.OWN,false))
-                for(base in FolderSettingsKeys.integers){
-                    val key=FolderSettingsKeys.key(base)
-                    bundle.putInt(key,prefs.getInt(key,prefs.getInt(base,SettingsDefaults.integer(base))))
-                }
-                for(base in FolderSettingsKeys.booleans){
-                    val key=FolderSettingsKeys.key(base)
-                    bundle.putBoolean(key,prefs.getBoolean(key,prefs.getBoolean(base,SettingsDefaults.boolean(base))))
+                for(scope in ScopedSettingsKeys.all){
+                    bundle.putBoolean(scope.own,prefs.getBoolean(scope.own,false))
+                    for(base in scope.integers){
+                        val key=scope.key(base)
+                        bundle.putInt(key,prefs.getInt(key,prefs.getInt(base,SettingsDefaults.integer(base))))
+                    }
+                    for(base in scope.booleans){
+                        val key=scope.key(base)
+                        bundle.putBoolean(key,prefs.getBoolean(key,prefs.getBoolean(base,SettingsDefaults.boolean(base))))
+                    }
                 }
                 bundle.putBoolean(KEY_PHOTO_WIDGET_BLUR,prefs.getBoolean(KEY_PHOTO_WIDGET_BLUR,false))
                 bundle.putBoolean(KEY_PHOTO_WIDGET_TINT,prefs.getBoolean(KEY_PHOTO_WIDGET_TINT,false))
@@ -63,7 +65,10 @@ class SettingsProvider : ContentProvider() {
                 bundle.putBoolean(KEY_HAZE_ENABLED,prefs.getBoolean(KEY_HAZE_ENABLED,false))
                 bundle.putBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,prefs.getBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,SettingsDefaults.boolean(KEY_DISABLE_EDGE_OPTIMIZATION)))
                 bundle.putBoolean(KEY_OPTIMIZE_MINI_ICONS,prefs.getBoolean(KEY_OPTIMIZE_MINI_ICONS,SettingsDefaults.boolean(KEY_OPTIMIZE_MINI_ICONS)))
-                bundle.putBoolean(KEY_LIFTED_BACKDROP,prefs.getBoolean(KEY_LIFTED_BACKDROP,SettingsDefaults.boolean(KEY_LIFTED_BACKDROP)))
+                bundle.putBoolean(KEY_DOCK_ENABLED,prefs.getBoolean(KEY_DOCK_ENABLED,SettingsDefaults.boolean(KEY_DOCK_ENABLED)))
+                bundle.putBoolean(KEY_DOCK_AUTO_LENGTH,prefs.getBoolean(KEY_DOCK_AUTO_LENGTH,SettingsDefaults.boolean(KEY_DOCK_AUTO_LENGTH)))
+                for(key in listOf(KEY_DOCK_SIDE_PADDING,KEY_DOCK_VERTICAL_PADDING,KEY_DOCK_RADIUS))bundle.putInt(key,prefs.getInt(key,SettingsDefaults.integer(key)))
+                bundle.putInt(KEY_ARTWORK_TRANSPARENCY,prefs.getInt(KEY_ARTWORK_TRANSPARENCY,SettingsDefaults.integer(KEY_ARTWORK_TRANSPARENCY)).coerceIn(0,100))
                 bundle.putInt(KEY_NATIVE_FLUX_SUPPORT,prefs.getInt(KEY_NATIVE_FLUX_SUPPORT,0))
                 if (prefs.contains(KEY_NATIVE_ICON_DARK)) bundle.putBoolean(KEY_NATIVE_ICON_DARK, prefs.getBoolean(KEY_NATIVE_ICON_DARK, false))
                 bundle.putInt(KEY_LIGHT_HUE, prefs.getInt(KEY_LIGHT_HUE, SettingsDefaults.integer(KEY_LIGHT_HUE)))
@@ -114,9 +119,11 @@ class SettingsProvider : ContentProvider() {
                 extras?.let { b ->
                     val editor = prefs.edit()
                     if(b.containsKey(KEY_GPU_EFFECTS))editor.putBoolean(KEY_GPU_EFFECTS,b.getBoolean(KEY_GPU_EFFECTS))
-                    if(b.containsKey(FolderSettingsKeys.OWN))editor.putBoolean(FolderSettingsKeys.OWN,b.getBoolean(FolderSettingsKeys.OWN))
-                    for(base in FolderSettingsKeys.integers){val key=FolderSettingsKeys.key(base);if(b.containsKey(key))editor.putInt(key,b.getInt(key))}
-                    for(base in FolderSettingsKeys.booleans){val key=FolderSettingsKeys.key(base);if(b.containsKey(key))editor.putBoolean(key,b.getBoolean(key))}
+                    for(scope in ScopedSettingsKeys.all){
+                        if(b.containsKey(scope.own))editor.putBoolean(scope.own,b.getBoolean(scope.own))
+                        for(base in scope.integers){val key=scope.key(base);if(b.containsKey(key))editor.putInt(key,b.getInt(key))}
+                        for(base in scope.booleans){val key=scope.key(base);if(b.containsKey(key))editor.putBoolean(key,b.getBoolean(key))}
+                    }
                     if(b.containsKey(KEY_PHOTO_WIDGET_BLUR))editor.putBoolean(KEY_PHOTO_WIDGET_BLUR,b.getBoolean(KEY_PHOTO_WIDGET_BLUR))
                     if(b.containsKey(KEY_PHOTO_WIDGET_TINT))editor.putBoolean(KEY_PHOTO_WIDGET_TINT,b.getBoolean(KEY_PHOTO_WIDGET_TINT))
                     if(b.containsKey(KEY_PHOTO_WIDGET_LIQUID_WIDTH))editor.putInt(KEY_PHOTO_WIDGET_LIQUID_WIDTH,b.getInt(KEY_PHOTO_WIDGET_LIQUID_WIDTH).coerceIn(0,100))
@@ -130,7 +137,11 @@ class SettingsProvider : ContentProvider() {
                     if(b.containsKey(KEY_HAZE_ENABLED))editor.putBoolean(KEY_HAZE_ENABLED,b.getBoolean(KEY_HAZE_ENABLED))
                     if(b.containsKey(KEY_DISABLE_EDGE_OPTIMIZATION))editor.putBoolean(KEY_DISABLE_EDGE_OPTIMIZATION,b.getBoolean(KEY_DISABLE_EDGE_OPTIMIZATION))
                     if(b.containsKey(KEY_OPTIMIZE_MINI_ICONS))editor.putBoolean(KEY_OPTIMIZE_MINI_ICONS,b.getBoolean(KEY_OPTIMIZE_MINI_ICONS))
-                    if(b.containsKey(KEY_LIFTED_BACKDROP))editor.putBoolean(KEY_LIFTED_BACKDROP,b.getBoolean(KEY_LIFTED_BACKDROP))
+                    if(b.containsKey(KEY_DOCK_ENABLED))editor.putBoolean(KEY_DOCK_ENABLED,b.getBoolean(KEY_DOCK_ENABLED))
+                    if(b.containsKey(KEY_DOCK_AUTO_LENGTH))editor.putBoolean(KEY_DOCK_AUTO_LENGTH,b.getBoolean(KEY_DOCK_AUTO_LENGTH))
+                    for(key in listOf(KEY_DOCK_SIDE_PADDING,KEY_DOCK_VERTICAL_PADDING))if(b.containsKey(key))editor.putInt(key,b.getInt(key).coerceIn(0,DOCK_PADDING_MAX))
+                    if(b.containsKey(KEY_DOCK_RADIUS))editor.putInt(KEY_DOCK_RADIUS,b.getInt(KEY_DOCK_RADIUS).coerceIn(0,100))
+                    if(b.containsKey(KEY_ARTWORK_TRANSPARENCY))editor.putInt(KEY_ARTWORK_TRANSPARENCY,b.getInt(KEY_ARTWORK_TRANSPARENCY).coerceIn(0,100))
                     if (b.containsKey(KEY_LIGHT_HUE)) editor.putInt(KEY_LIGHT_HUE, b.getInt(KEY_LIGHT_HUE))
                     if (b.containsKey(KEY_LIGHT_SATURATION)) editor.putInt(KEY_LIGHT_SATURATION, b.getInt(KEY_LIGHT_SATURATION))
                     if (b.containsKey(KEY_LIGHT_BRIGHTNESS)) editor.putInt(KEY_LIGHT_BRIGHTNESS, b.getInt(KEY_LIGHT_BRIGHTNESS))
@@ -235,7 +246,16 @@ class SettingsProvider : ContentProvider() {
         const val KEY_HAZE_ENABLED = "glass_haze_enabled"
         const val KEY_DISABLE_EDGE_OPTIMIZATION = "disable_edge_optimization"
         const val KEY_OPTIMIZE_MINI_ICONS = "optimize_folder_mini_icons"
-        const val KEY_LIFTED_BACKDROP = "lifted_backdrop"
+        /** Glass dock behind the hotseat icons. Paddings and radius: % of the icon size. */
+        const val KEY_DOCK_ENABLED = "dock_enabled"
+        const val KEY_DOCK_SIDE_PADDING = "dock_side_padding"
+        const val KEY_DOCK_VERTICAL_PADDING = "dock_vertical_padding"
+        const val KEY_DOCK_RADIUS = "dock_radius"
+        /** On: the dock fits the hotseat icons and animates its width; off: it spans the full hotseat row. */
+        const val KEY_DOCK_AUTO_LENGTH = "dock_auto_length"
+        const val DOCK_PADDING_MAX = 60
+        /** Experimental (developer mode): transparency (0..100 %) of the tint over icons that are a full picture without a plate. */
+        const val KEY_ARTWORK_TRANSPARENCY = "artwork_transparency"
         /** Local UI preference of the settings app; never sent to the launcher or exported in presets. */
         const val KEY_MD3_UI = "ui_md3"
         const val KEY_PHOTO_WIDGET_TINT = "photo_widget_tint"

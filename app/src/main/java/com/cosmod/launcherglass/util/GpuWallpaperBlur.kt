@@ -113,6 +113,7 @@ object GpuWallpaperBlur {
     } catch (_: Throwable) { null }
     private val blurTarget = Target("CosmodBlur",true)
     private val folderTarget = Target("CherryPickFolderBlur",true)
+    private val dockTarget = Target("CherryPickDockBlur",true)
     private val sampleTarget = Target("CosmodMotionSample")
     private var count = 0
     private var elapsedMs = 0L
@@ -129,6 +130,7 @@ object GpuWallpaperBlur {
     }
 
     fun blurFolder(source:Bitmap,width:Int,height:Int,radius:Float,level:Int,vibrancy:Int)=folderTarget.render(source,width,height,radius,level,vibrancy)
+    fun blurDock(source:Bitmap,width:Int,height:Int,radius:Float,level:Int,vibrancy:Int)=dockTarget.render(source,width,height,radius,level,vibrancy)
 
     fun fingerprint(source: Bitmap): Long {
         val thumbnail = sampleTarget.render(source, 12, 12, 0f)
@@ -147,6 +149,7 @@ object GpuWallpaperBlur {
     fun close() {
         blurTarget.close()
         folderTarget.close()
+        dockTarget.close()
         sampleTarget.close()
     }
 }

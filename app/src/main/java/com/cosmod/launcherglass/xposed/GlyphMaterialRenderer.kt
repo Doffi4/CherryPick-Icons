@@ -41,7 +41,7 @@ object GlyphMaterialRenderer {
         val target = Canvas(output)
         target.drawBitmap(glyph, 0f, 0f, Paint(original).apply { alpha = 255; xfermode = null })
         if (volume > 0) {
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val paint = GlassVolume.paint().apply {
                 shader = GlassVolume.shader(height.toFloat(), volume)
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
             }

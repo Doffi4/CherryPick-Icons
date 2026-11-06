@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var currentScroll: androidx.core.widget.NestedScrollView? = null
     private var settingsPage = false
     private var folderExpanded=true
+    private var dockExpanded=false
     private var blurExpanded = true
     private var designExpanded = false
     private var statusText: TextView? = null
@@ -85,14 +86,16 @@ class MainActivity : AppCompatActivity() {
     private val secondaryText get() = color(M.attr.colorOnSurfaceVariant)
     private fun color(attr: Int) = MaterialColors.getColor(this, attr, Color.GRAY)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
-    private fun bool(key:String):Boolean = if(key.startsWith("folder_") && key.removePrefix("folder_") in FolderSettingsKeys.booleans)
-        prefs.getBoolean(key,prefs.getBoolean(key.removePrefix("folder_"),SettingsDefaults.boolean(key)))else prefs.getBoolean(key,SettingsDefaults.boolean(key))
-    private fun number(key:String):Int = if(key.startsWith("folder_") && key.removePrefix("folder_") in FolderSettingsKeys.integers)
-        prefs.getInt(key,prefs.getInt(key.removePrefix("folder_"),SettingsDefaults.integer(key)))else prefs.getInt(key,SettingsDefaults.integer(key))
+    // A scoped (folder/dock) key that was never saved inherits the current icon value.
+    private fun bool(key:String):Boolean = ScopedSettingsKeys.baseOf(key)?.let {base -> prefs.getBoolean(key,prefs.getBoolean(base,SettingsDefaults.boolean(base)))}
+        ?: prefs.getBoolean(key,SettingsDefaults.boolean(key))
+    private fun number(key:String):Int = ScopedSettingsKeys.baseOf(key)?.let {base -> prefs.getInt(key,prefs.getInt(base,SettingsDefaults.integer(base)))}
+        ?: prefs.getInt(key,SettingsDefaults.integer(key))
     private fun darkIcons() = prefs.getBoolean(SettingsProvider.KEY_NATIVE_ICON_DARK, com.cosmod.launcherglass.util.IconPalette.isSystemDark(this))
     private fun master() = bool(SettingsProvider.KEY_ENABLED)
     private fun blur() = master() && bool(SettingsProvider.KEY_BLUR_ENABLED)
     private fun folderOwn()=blur() && bool(SettingsProvider.KEY_FOLDER_BLUR_ENABLED) && bool(FolderSettingsKeys.OWN)
+    private fun dockOwn()=blur() && bool(SettingsProvider.KEY_DOCK_ENABLED) && bool(DockSettingsKeys.OWN)
     private fun design() = master() && bool(SettingsProvider.KEY_DESIGN_ENABLED)
 
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(UiLanguage.wrap(newBase)) }
@@ -273,14 +276,15 @@ class MainActivity : AppCompatActivity() {
     private fun save(key: String, value: Any) {
         if(updatingUi)return
         prefs.edit().apply {
-            if(key==FolderSettingsKeys.OWN && value==true){
-                FolderSettingsKeys.integers.forEach {base -> val own=FolderSettingsKeys.key(base);if(!prefs.contains(own))putInt(own,number(base))}
-                FolderSettingsKeys.booleans.forEach {base -> val own=FolderSettingsKeys.key(base);if(!prefs.contains(own))putBoolean(own,bool(base))}
+            // Own settings start as a copy of the icon values instead of jumping to defaults.
+            ScopedSettingsKeys.all.firstOrNull {it.own==key}?.takeIf {value==true}?.let {scope ->
+                scope.integers.forEach {base -> val own=scope.key(base);if(!prefs.contains(own))putInt(own,number(base))}
+                scope.booleans.forEach {base -> val own=scope.key(base);if(!prefs.contains(own))putBoolean(own,bool(base))}
             }
             when(value) { is Boolean -> putBoolean(key, value); is Int -> putInt(key, value) } }.apply()
         contentResolver.notifyChange(SettingsProvider.CONTENT_URI, null)
         updateGates();updateStatus()
-        if(key==FolderSettingsKeys.OWN || key==SettingsProvider.KEY_DEVELOPER_MODE)refreshControls()
+        if(ScopedSettingsKeys.isOwnKey(key) || key==SettingsProvider.KEY_DEVELOPER_MODE)refreshControls()
         if(md3!=md3Requested())rebuildPage()
     }
     /** Rebuilds the page after the interface style changes, keeping the scroll position. */
@@ -357,13 +361,25 @@ class MainActivity : AppCompatActivity() {
             navigationContentDescription = getString(R.string.ui_back)
             setNavigationOnClickListener { haptic(it); settingsPage = false; showPage() }
         }
+        if (settingsPage) menu.add(0, 3, 0, getString(R.string.ui_support_project)).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            // Same filled tertiary button as the classic interface instead of plain menu text.
+            actionView = FrameLayout(this@MainActivity).apply {
+                setPadding(0, 0, dp(4), 0)
+                addView(supportButton(), FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_VERTICAL))
+            }
+        }
         val item = if (settingsPage) menu.add(0, 1, 0, getString(R.string.ui_language)).setIcon(R.drawable.ic_language)
             else menu.add(0, 2, 0, getString(R.string.ui_settings)).setIcon(R.drawable.ic_settings)
         item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         item.icon?.mutate()?.setTint(secondaryText)
         setOnMenuItemClickListener { menuItem ->
             haptic(this)
-            if (menuItem.itemId == 1) showLanguageDialog(this) else { settingsPage = true; showPage() }
+            when (menuItem.itemId) {
+                1 -> showLanguageDialog(this)
+                3 -> openSupport()
+                else -> { settingsPage = true; showPage() }
+            }
             true
         }
     }
@@ -513,6 +529,7 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.ui_depth_strength), SettingsProvider.KEY_GRADIENT_OPACITY)
         }
         folderSection(body)
+        dockSection(body)
         add(body,text(getString(R.string.ui_widgets),22f,bold=true),top=24,bottom=8)
         effectGroup(body,getString(R.string.ui_photo_widget_blur),SettingsProvider.KEY_PHOTO_WIDGET_BLUR,
             getString(R.string.ui_photo_widget_opacity),SettingsProvider.KEY_PHOTO_WIDGET_OPACITY,min=0,max=100,
@@ -583,38 +600,87 @@ class MainActivity : AppCompatActivity() {
     private fun folderSection(body:LinearLayout){
         section(body,getString(R.string.ui_folders),"",SettingsProvider.KEY_FOLDER_BLUR_ENABLED,folderExpanded,
             {folderExpanded=it},::blur,{blur() && bool(SettingsProvider.KEY_FOLDER_BLUR_ENABLED)}) {content ->
-            add(content,switchRow(getString(R.string.ui_folder_own),FolderSettingsKeys.OWN,getString(R.string.ui_folder_mode_hint)))
-            val mode=text(getString(if(bool(FolderSettingsKeys.OWN))R.string.ui_folder_mode_own else R.string.ui_folder_mode_icons),14f,true)
-            add(content,mode,bottom=10)
-            val controls=column().apply {visibility=if(bool(FolderSettingsKeys.OWN))View.VISIBLE else View.GONE}
-            refreshers.add {
-                controls.visibility=if(bool(FolderSettingsKeys.OWN))View.VISIBLE else View.GONE
-                mode.text=getString(if(bool(FolderSettingsKeys.OWN))R.string.ui_folder_mode_own else R.string.ui_folder_mode_icons)
-            }
-            gate(controls){blur() && bool(SettingsProvider.KEY_FOLDER_BLUR_ENABLED) && bool(FolderSettingsKeys.OWN)}
-            folderStyleSelector(controls)
-            effectGroup(controls,getString(R.string.ui_blur),FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_RADIUS_ENABLED),
-                getString(R.string.ui_blur_radius),FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_RADIUS),max=50,allowed=::folderOwn,suffix="") {details ->
-                if(bool(SettingsProvider.KEY_DEVELOPER_MODE))add(details,slider(getString(R.string.ui_blur_quality),FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_QUALITY),0,100,"%"))
-            }
-            val tone=column()
-            val details=column().apply {visibility=View.GONE}
-            add(tone,switchRow(getString(R.string.ui_blur_tone),FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_TONE_ENABLED),expanded=false){open -> reveal(details,open)})
-            gate(details){folderOwn() && bool(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_TONE_ENABLED))}
-            for((label,key) in listOf(R.string.ui_plate_opacity to SettingsProvider.KEY_BG_OPACITY,
-                R.string.ui_blur_saturation to SettingsProvider.KEY_BLUR_SATURATION,
-                R.string.ui_blur_vibrancy to SettingsProvider.KEY_BLUR_VIBRANCY,
-                R.string.ui_blur_brightness to SettingsProvider.KEY_BLUR_LIGHTENING)){
-                divider(details)
-                add(details,slider(getString(label),FolderSettingsKeys.key(key),0,if(key==SettingsProvider.KEY_BLUR_SATURATION || key==SettingsProvider.KEY_BLUR_VIBRANCY)200 else 100,"%",
-                    if(key==SettingsProvider.KEY_BLUR_SATURATION)getString(R.string.ui_blur_saturation_hint)else null))
-            }
-            add(tone,details);add(controls,card(tone,true),top=8,bottom=4)
-            add(content,controls)
+            ownGlassControls(content,FolderSettingsKeys,getString(R.string.ui_folder_mode_hint),true,::folderOwn)
         }
     }
 
-    private fun folderStyleSelector(parent:LinearLayout) {
+    private fun dockSection(body:LinearLayout){
+        section(body,getString(R.string.ui_dock),"",SettingsProvider.KEY_DOCK_ENABLED,dockExpanded,
+            {dockExpanded=it},::blur,{blur() && bool(SettingsProvider.KEY_DOCK_ENABLED)}) {content ->
+            add(content,switchRow(getString(R.string.ui_dock_auto_length),SettingsProvider.KEY_DOCK_AUTO_LENGTH))
+            collapsibleGroup(content,getString(R.string.ui_dock_size),SettingsProvider.KEY_DOCK_SIDE_PADDING) {details ->
+                add(details,slider(getString(R.string.ui_dock_side_padding),SettingsProvider.KEY_DOCK_SIDE_PADDING,0,SettingsProvider.DOCK_PADDING_MAX,"%"))
+                divider(details)
+                add(details,slider(getString(R.string.ui_dock_vertical_padding),SettingsProvider.KEY_DOCK_VERTICAL_PADDING,0,SettingsProvider.DOCK_PADDING_MAX,"%"))
+                divider(details)
+                add(details,slider(getString(R.string.ui_dock_radius),SettingsProvider.KEY_DOCK_RADIUS,0,100,"%",getString(R.string.ui_dock_radius_hint)))
+            }
+            ownGlassControls(content,DockSettingsKeys,null,false,::dockOwn,top=8)
+        }
+    }
+
+    /** Inner card with a title and a chevron: a collapsible group without a switch of its own. */
+    private fun collapsibleGroup(parent:LinearLayout,label:String,resetKey:String,content:(LinearLayout)->Unit) {
+        val group=column()
+        val details=column().apply {visibility=View.GONE}
+        divider(details)
+        content(details)
+        val line=row().apply {
+            if(md3){setPadding(dp(16),dp(8),dp(8),dp(8));minimumHeight=dp(56)}
+            else {setPadding(dp(16),dp(12),dp(8),dp(12));minimumHeight=dp(72)}
+        }
+        val labels=column()
+        add(labels,text(label,16f))
+        line.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+        val chevron=expandButton(false,label) {open -> reveal(details,open)}
+        line.addView(actions(listOf(reset(resetKey),chevron)))
+        if(md3)rowRipple(line)
+        labels.isClickable=true;labels.isFocusable=true;labels.contentDescription=label
+        labels.setOnClickListener {chevron.performClick()}
+        if(md3)line.setOnClickListener {chevron.performClick()}
+        add(group,line);add(group,details)
+        add(parent,card(group,true),top=8,bottom=4)
+    }
+
+    /**
+     * "Own settings" of a folder/dock scope. Off: the surface inherits the icon
+     * glass. On: its own style, blur and tone groups, laid out like the icon ones.
+     */
+    private fun ownGlassControls(content:LinearLayout,scope:ScopedSettingsKeys,hint:String?,status:Boolean,
+        allowed:()->Boolean,top:Int=0) {
+        add(content,switchRow(getString(R.string.ui_folder_own),scope.own,hint),top=top)
+        val mode=if(status)text(getString(if(bool(scope.own))R.string.ui_folder_mode_own else R.string.ui_folder_mode_icons),14f,true) else null
+        mode?.let {add(content,it,bottom=10)}
+        val controls=column().apply {visibility=if(bool(scope.own))View.VISIBLE else View.GONE}
+        refreshers.add {
+            controls.visibility=if(bool(scope.own))View.VISIBLE else View.GONE
+            mode?.text=getString(if(bool(scope.own))R.string.ui_folder_mode_own else R.string.ui_folder_mode_icons)
+        }
+        gate(controls,allowed)
+        if(!status)space(controls,8)
+        scopedStyleSelector(controls,scope,allowed)
+        effectGroup(controls,getString(R.string.ui_blur),scope.key(SettingsProvider.KEY_BLUR_RADIUS_ENABLED),
+            getString(R.string.ui_blur_radius),scope.key(SettingsProvider.KEY_BLUR_RADIUS),max=50,allowed=allowed,suffix="") {details ->
+            if(bool(SettingsProvider.KEY_DEVELOPER_MODE))add(details,slider(getString(R.string.ui_blur_quality),scope.key(SettingsProvider.KEY_BLUR_QUALITY),0,100,"%"))
+        }
+        val tone=column()
+        val details=column().apply {visibility=View.GONE}
+        add(tone,switchRow(getString(R.string.ui_blur_tone),scope.key(SettingsProvider.KEY_BLUR_TONE_ENABLED),expanded=false){open -> reveal(details,open)})
+        gate(details){allowed() && bool(scope.key(SettingsProvider.KEY_BLUR_TONE_ENABLED))}
+        for((label,key) in listOf(R.string.ui_plate_opacity to SettingsProvider.KEY_BG_OPACITY,
+            R.string.ui_blur_saturation to SettingsProvider.KEY_BLUR_SATURATION,
+            R.string.ui_blur_vibrancy to SettingsProvider.KEY_BLUR_VIBRANCY,
+            R.string.ui_blur_brightness to SettingsProvider.KEY_BLUR_LIGHTENING)){
+            divider(details)
+            add(details,slider(getString(label),scope.key(key),0,if(key==SettingsProvider.KEY_BLUR_SATURATION || key==SettingsProvider.KEY_BLUR_VIBRANCY)200 else 100,"%",
+                if(key==SettingsProvider.KEY_BLUR_SATURATION && status)getString(R.string.ui_blur_saturation_hint)else null))
+        }
+        add(tone,details);add(controls,card(tone,true),top=8,bottom=4)
+        add(content,controls)
+    }
+
+    private fun scopedStyleSelector(parent:LinearLayout,scope:ScopedSettingsKeys,allowed:()->Boolean) {
+        val styleKey=scope.key(SettingsProvider.KEY_BLUR_STYLE)
         val title=row()
         title.addView(text(getString(R.string.ui_blur_style),16f,bold=true),LinearLayout.LayoutParams(0,-2,1f))
         add(parent,title,bottom=4)
@@ -629,24 +695,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
         var refreshing=false
-        fun refresh(){refreshing=true;group.check(buttons[number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE)).coerceIn(0,1)].id);refreshing=false}
+        fun refresh(){refreshing=true;group.check(buttons[number(styleKey).coerceIn(0,1)].id);refreshing=false}
         refresh()
         group.addOnButtonCheckedListener { _,id,checked ->
             if(checked && !refreshing) {
-                haptic(group);save(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE),buttons.indexOfFirst {it.id==id})
+                haptic(group);save(styleKey,buttons.indexOfFirst {it.id==id})
             }
         }
-        gate(group,::folderOwn)
-        gate(buttons[1]) {folderOwn() && android.os.Build.VERSION.SDK_INT>=33}
+        gate(group,allowed)
+        gate(buttons[1]) {allowed() && android.os.Build.VERSION.SDK_INT>=33}
         refreshers.add {refresh()}
         add(parent,group,bottom=8)
         val parameters=column()
-        add(parameters,slider(getString(R.string.ui_liquid_width),FolderSettingsKeys.key(SettingsProvider.KEY_LIQUID_WIDTH),0,100,"%"))
-        add(parameters,slider(getString(R.string.ui_liquid_distortion),FolderSettingsKeys.key(SettingsProvider.KEY_LIQUID_DISTORTION),0,300,"%"))
-        parameters.visibility=if(number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1)View.VISIBLE else View.GONE
-        refreshers.add {parameters.visibility=if(number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1)View.VISIBLE else View.GONE}
-        group.addOnButtonCheckedListener {_,_,checked -> if(checked && !refreshing)reveal(parameters,number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1)}
-        gate(parameters) {folderOwn() && number(FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_STYLE))==1}
+        add(parameters,slider(getString(R.string.ui_liquid_width),scope.key(SettingsProvider.KEY_LIQUID_WIDTH),0,100,"%"))
+        add(parameters,slider(getString(R.string.ui_liquid_distortion),scope.key(SettingsProvider.KEY_LIQUID_DISTORTION),0,300,"%"))
+        parameters.visibility=if(number(styleKey)==1)View.VISIBLE else View.GONE
+        refreshers.add {parameters.visibility=if(number(styleKey)==1)View.VISIBLE else View.GONE}
+        group.addOnButtonCheckedListener {_,_,checked -> if(checked && !refreshing)reveal(parameters,number(styleKey)==1)}
+        gate(parameters) {allowed() && number(styleKey)==1}
         add(parent,parameters,bottom=8)
     }
 
@@ -861,9 +927,11 @@ class MainActivity : AppCompatActivity() {
             SettingsProvider.KEY_BG_OPACITY, SettingsProvider.KEY_DRAWER_BLUR_ENABLED,
             SettingsProvider.KEY_FOLDER_BLUR_ENABLED, SettingsProvider.KEY_LIVE_FPS,
             SettingsProvider.KEY_BLUR_SATURATION,SettingsProvider.KEY_BLUR_VIBRANCY,SettingsProvider.KEY_BLUR_LIGHTENING)
-        SettingsProvider.KEY_FOLDER_BLUR_ENABLED -> listOf(key,FolderSettingsKeys.OWN)+FolderSettingsKeys.integers.map(FolderSettingsKeys::key)+FolderSettingsKeys.booleans.map(FolderSettingsKeys::key)
-        FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_TONE_ENABLED) -> listOf(key)+listOf(SettingsProvider.KEY_BG_OPACITY,SettingsProvider.KEY_BLUR_SATURATION,SettingsProvider.KEY_BLUR_VIBRANCY,SettingsProvider.KEY_BLUR_LIGHTENING).map(FolderSettingsKeys::key)
-        FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_RADIUS_ENABLED) -> listOf(key,FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_RADIUS),FolderSettingsKeys.key(SettingsProvider.KEY_BLUR_QUALITY))
+        SettingsProvider.KEY_FOLDER_BLUR_ENABLED -> listOf(key,FolderSettingsKeys.OWN)+FolderSettingsKeys.keys
+        SettingsProvider.KEY_DOCK_ENABLED -> listOf(key,SettingsProvider.KEY_DOCK_AUTO_LENGTH,SettingsProvider.KEY_DOCK_SIDE_PADDING,
+            SettingsProvider.KEY_DOCK_VERTICAL_PADDING,SettingsProvider.KEY_DOCK_RADIUS,DockSettingsKeys.OWN)+DockSettingsKeys.keys
+        // The size group of the dock resets its three sliders together.
+        SettingsProvider.KEY_DOCK_SIDE_PADDING -> listOf(key,SettingsProvider.KEY_DOCK_VERTICAL_PADDING,SettingsProvider.KEY_DOCK_RADIUS)
         SettingsProvider.KEY_PHOTO_WIDGET_BLUR -> listOf(key,SettingsProvider.KEY_PHOTO_WIDGET_OPACITY,SettingsProvider.KEY_PHOTO_WIDGET_TINT,
             SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH,SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_DISTORTION)
         SettingsProvider.KEY_DESIGN_ENABLED -> listOf(key,
@@ -883,7 +951,12 @@ class MainActivity : AppCompatActivity() {
             SettingsProvider.KEY_BLUR_SATURATION,SettingsProvider.KEY_BLUR_VIBRANCY,SettingsProvider.KEY_BLUR_LIGHTENING)
         SettingsProvider.KEY_BLUR_LOCATIONS_ENABLED -> listOf(key,SettingsProvider.KEY_DRAWER_BLUR_ENABLED,SettingsProvider.KEY_FOLDER_ICONS_BLUR_ENABLED)
         SettingsProvider.KEY_VOLUME_ENABLED -> listOf(key, SettingsProvider.KEY_GRADIENT_OPACITY)
-        else -> listOf(key)
+        else -> ScopedSettingsKeys.scopeOf(key)?.let {scope -> when(ScopedSettingsKeys.baseOf(key)) {
+            SettingsProvider.KEY_BLUR_TONE_ENABLED -> listOf(key)+listOf(SettingsProvider.KEY_BG_OPACITY,SettingsProvider.KEY_BLUR_SATURATION,
+                SettingsProvider.KEY_BLUR_VIBRANCY,SettingsProvider.KEY_BLUR_LIGHTENING).map(scope::key)
+            SettingsProvider.KEY_BLUR_RADIUS_ENABLED -> listOf(key,scope.key(SettingsProvider.KEY_BLUR_RADIUS),scope.key(SettingsProvider.KEY_BLUR_QUALITY))
+            else -> null
+        }} ?: listOf(key)
     }
     private fun resetButton(key:String):View {
         val keys=resetKeys(key)
@@ -1131,8 +1204,43 @@ class MainActivity : AppCompatActivity() {
         add(parent,text(getString(R.string.ui_material_order),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
     }
 
+    /** Experimental variants for plate-less picture icons (games, photos, gradients). */
+    private fun artworkIcons(parent:LinearLayout){
+        add(parent,text(getString(R.string.ui_artwork_icons),16f,true).apply {setPadding(dp(20),dp(12),dp(20),0)})
+        val control=slider(getString(R.string.ui_artwork_transparency),SettingsProvider.KEY_ARTWORK_TRANSPARENCY,0,100,"%")
+        gate(control){bool(SettingsProvider.KEY_DEVELOPER_MODE)}
+        add(parent,control)
+        add(parent,text(getString(R.string.ui_artwork_icons_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
+    }
+
+    /** Filled tertiary support button: two lines, readable on the tertiary container. */
+    private fun supportButton() = com.google.android.material.button.MaterialButton(this).apply {
+        text=getString(R.string.ui_support_project_button);isAllCaps=false;maxLines=2
+        gravity=Gravity.CENTER;textAlignment=View.TEXT_ALIGNMENT_CENTER
+        textSize=14f;minHeight=dp(48);insetTop=0;insetBottom=0;cornerRadius=dp(16)
+        setPadding(dp(16),dp(6),dp(16),dp(6))
+        backgroundTintList=ColorStateList.valueOf(color(M.attr.colorTertiary))
+        setTextColor(color(M.attr.colorOnTertiary))
+        rippleColor=ColorStateList.valueOf((color(M.attr.colorOnTertiary) and 0x00ffffff) or 0x33000000)
+        typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        contentDescription=getString(R.string.ui_support_project)
+        setOnClickListener {haptic(it);openSupport()}
+    }
+
+    private fun openSupport() {
+        try {startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://pay.cloudtips.ru/p/e6230fb4")))}
+        catch(_:Exception){Toast.makeText(this,getString(R.string.ui_link_error),Toast.LENGTH_SHORT).show()}
+    }
+
     private fun buildSettings(body: LinearLayout) {
-        if(!md3)add(body,text(getString(R.string.ui_settings),30f,bold=true),top=8,bottom=8)
+        if(!md3){
+            // Support action sits next to the large title (MD3: in the top app bar).
+            val title=row()
+            title.addView(text(getString(R.string.ui_settings),30f,bold=true),LinearLayout.LayoutParams(0,-2,1f))
+            val support=supportButton().apply {maxWidth=resources.displayMetrics.widthPixels/2}
+            title.addView(support,LinearLayout.LayoutParams(-2,-2).apply {marginStart=dp(12)})
+            add(body,title,top=8,bottom=8)
+        }
         add(body,text(getString(R.string.ui_blur_update),14f,true),bottom=24)
         val modes = column().apply { setPadding(dp(20),dp(20),dp(20),dp(12)) }
         val modeHeader = row()
@@ -1198,8 +1306,7 @@ class MainActivity : AppCompatActivity() {
         add(developerOptions,switchRow(getString(R.string.ui_optimize_mini_icons),SettingsProvider.KEY_OPTIMIZE_MINI_ICONS))
         add(developerOptions,text(getString(R.string.ui_optimize_mini_icons_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
         divider(developerOptions)
-        add(developerOptions,switchRow(getString(R.string.ui_lifted_backdrop),SettingsProvider.KEY_LIFTED_BACKDROP))
-        add(developerOptions,text(getString(R.string.ui_lifted_backdrop_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
+        artworkIcons(developerOptions)
         divider(developerOptions)
         add(developerOptions,switchRow(getString(R.string.ui_md3_interface),SettingsProvider.KEY_MD3_UI))
         add(developerOptions,text(getString(R.string.ui_md3_interface_hint),12f,true).apply {setPadding(dp(20),0,dp(20),dp(16))})
@@ -1251,15 +1358,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         add(body,logs)
-        val support=com.google.android.material.button.MaterialButton(this,null,M.attr.materialButtonOutlinedStyle).apply {
-            text=getString(R.string.ui_support_project);minHeight=dp(48)
-            setOnClickListener {
-                haptic(it)
-                try {startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://pay.cloudtips.ru/p/e6230fb4")))}
-                catch(_:Exception){Toast.makeText(context,getString(R.string.ui_link_error),Toast.LENGTH_SHORT).show()}
-            }
-        }
-        add(body,support,top=12)
         val about=column().apply { setPadding(dp(20),dp(20),dp(20),dp(12)) }
         add(about,text("v${BuildConfig.VERSION_NAME}",12f,true))
         add(about,text("by @immorgue",14f).apply {

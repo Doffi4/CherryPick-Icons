@@ -304,11 +304,19 @@ object IconMaterialRenderer {
     @Synchronized fun draw(
         canvas: Canvas, bounds: Rect, mask: Bitmap, glyph: Bitmap,
         color: Int, tintAlpha: Int, hideGlyph: Boolean,
-        wallpaper: Bitmap?, source: RectF?,binding:Binding?=null,volume:Boolean=true,style:GlassStyle=GlassStyle.icons(),buildOverlay: (Canvas, Rect, Boolean) -> Unit
+        sampleWallpaper: Bitmap?, sampleSource: RectF?,binding:Binding?=null,volume:Boolean=true,style:GlassStyle=GlassStyle.icons(),buildOverlay: (Canvas, Rect, Boolean) -> Unit
     ) {
         val width = bounds.width()
         val height = bounds.height()
         if (width <= 0 || height <= 0) return
+        // Blur switched off (radius 0): clear glass. No wallpaper sample at all,
+        // neither the blurred Frosted copy nor the Liquid lens: the only source
+        // is a low-resolution wallpaper screenshot, which itself looked blurred.
+        // The overlay (plate tint, volume, rim) stays; the real wallpaper shows
+        // through the translucent plate in full resolution.
+        val clear = clearGlass(style)
+        val wallpaper = if (clear) null else sampleWallpaper
+        val source = if (clear) null else sampleSource
         val blurred = wallpaper != null && source != null
         val key = Key(mask, glyph, width, height, color, tintAlpha, hideGlyph, blurred,
             if(volume)PrefsHelper.gradientOpacity else 0,
@@ -363,6 +371,7 @@ object IconMaterialRenderer {
                 }
                 if (key.gradient > 0) {
                     val gradient = com.cosmod.launcherglass.util.GlassVolume.shader(height.toFloat(), key.gradient)
+                    paint.isDither = true
                     paint.shader = ComposeShader(gradient, maskShader, PorterDuff.Mode.DST_IN)
                     target.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 }
@@ -507,6 +516,9 @@ object IconMaterialRenderer {
             GlassLogger.i("IconMaterial", "Cached icon material: draws=$draws, builds=$builds, bytes=${cache.size()}")
         }
     }
+
+    /** Clear glass: the blur of this material is switched off. */
+    fun clearGlass(style:GlassStyle)=style.radius<=0
 
     /** The sampler an element's own draw bound for [material], preferring its latest. */
     private fun foreignSampler(binding:Binding,material:Material,width:Int,height:Int):Sampler? {
@@ -676,6 +688,9 @@ object IconMaterialRenderer {
         lift.toDrag.postTranslate(dragView.scrollX.toFloat(),dragView.scrollY.toFloat())
 
         val style=sampler.style
+        // Clear glass never uses a lifted blur or liquid lens, even if an old
+        // sampler survives the preference transition for one frame.
+        if(clearGlass(style))return false
         val scale=toNode.mapRadius(1f).coerceIn(.05f,20f)
         val screenRadius=style.radius.coerceIn(0,50)*sampler.screenH/800f*(if(style.liquid).28f else 1f)
         val radius=kotlin.math.round(screenRadius*scale*4f)/4f

@@ -13,7 +13,7 @@ internal object DynamicIconForeground {
     fun clear() { entries.values.forEach { it.node.discardDisplayList() }; entries.clear(); plates.clear() }
     fun plate(parts: ProcessedIcon): ProcessedIcon = plates.getOrPut(parts) {
         ProcessedIcon(Bitmap.createBitmap(parts.glyphBitmap.width, parts.glyphBitmap.height, Bitmap.Config.ARGB_8888),
-            parts.plateMaskBitmap, parts.bgColor)
+            parts.plateMaskBitmap, if(PrefsHelper.iconPalette.custom) PrefsHelper.iconPalette.background else parts.bgColor)
     }
 
     /** [reuse]: an OEM decoration re-records the icon; show the current artwork node as is. */

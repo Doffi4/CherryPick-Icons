@@ -77,6 +77,10 @@ internal object FolderMaterialHook {
         // after the drop a stale callback would map the folder plate onto the
         // detached DragView and route its invalidations there.
         var drawingHost:View?=null
+        // Set while OplusPreviewBackground.drawBackground(Canvas) runs: the
+        // canvas belongs to [drawingHost] and may be translated (a CellLayout
+        // delegated drawing places the plate at the hovered cell).
+        var localDraw=false
         override fun draw(canvas:Canvas){
             val host=callback as? View
             val view=drawingHost ?: host?.takeIf {it.background===this || (it as? ImageView)?.drawable===this} ?: source.get() ?: host ?: return
@@ -112,7 +116,10 @@ internal object FolderMaterialHook {
             cachedBounds.set(bounds);cachedRadius=radius;cachedInfo=info;cachedSpanX=sx;cachedSpanY=sy;cachedRevision=geometryRevision
             }
             if(!logged){logged=true;GlassLogger.i("FolderMaterial","Native shape: radius=$radius, path=${!path.isEmpty}, bounds=$bounds, callback=${callback?.javaClass?.simpleName}")}
-            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint,fallback=fallback)){
+            @Suppress("DEPRECATION")
+            val local=if(localDraw && canvas.isHardwareAccelerated)RectF(bounds).also {canvas.matrix.mapRect(it)}else null
+            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint,
+                    local=local,fallback=fallback)){
                 fallback?.bounds=bounds;fallback?.draw(canvas)
             }
         }
@@ -198,6 +205,16 @@ internal object FolderMaterialHook {
         }
         ModuleHooks.hookAllMethods(type,"drawBackground",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
+                if(param.args.size==1){
+                    // drawBackground(Canvas) also runs as a CellLayout delegated
+                    // drawing (folder creation / accept hover). The canvas then
+                    // belongs to the CellLayout, translated to the cell, so the
+                    // sample position must follow that view, not the folder icon.
+                    val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
+                    val host=(field(param.thisObject,"mDrawingDelegate") as? View) ?: field(param.thisObject,"mInvalidateDelegate") as? View
+                    material.drawingHost=host;material.localDraw=host!=null
+                    return
+                }
                 if(param.args.size<2)return
                 val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
                 if(!enabled(material.source.get()))return
@@ -222,6 +239,11 @@ internal object FolderMaterialHook {
                         param.result=null
                     }
                 }catch(t:Throwable){GlassLogger.e("FolderMaterial","Converted native material failed",t)}
+            }
+            override fun afterHookedMethod(param:MethodHookParam){
+                if(param.args.size!=1)return
+                val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
+                material.drawingHost=null;material.localDraw=false
             }
         })
         ModuleHooks.hookAllMethods(type,"initBgDrawable",object:XC_MethodHook(){

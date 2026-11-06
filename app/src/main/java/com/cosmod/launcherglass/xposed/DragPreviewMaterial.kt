@@ -27,8 +27,15 @@ import kotlin.math.roundToInt
 internal object DragPreviewMaterial {
     class Surface(val bounds:Rect,val radius:Float,val path:Path?,val decorate:Boolean,val alpha:Int,val style:GlassStyle,
                   val nativeShape:Drawable?,val nativeMask:Bitmap?,val pathFingerprint:Long?,val identity:Drawable,val fallback:Drawable?)
+    /**
+     * [nested]: an icon drawn by a child of the dragged view (items of a
+     * multi-icon cluster). It keeps its resting wallpaper sample: only the
+     * dragged composite itself lifts the scene below the DragView, and one
+     * lifted backdrop per item both brightened the items and cost a scene
+     * blur each per frame.
+     */
     private class Element(val matrix:Matrix,val clip:RectF?,val alpha:Float,val bounds:Rect,
-                          val icon:Drawable?,val iconAlpha:Int,val mini:Boolean,val surface:Surface?)
+                          val icon:Drawable?,val iconAlpha:Int,val mini:Boolean,val surface:Surface?,val nested:Boolean=false)
     private class Capture(val source:View){
         var canvas:Canvas?=null
         var width=0
@@ -119,10 +126,22 @@ internal object DragPreviewMaterial {
         return if(current===source)alpha.coerceIn(0f,1f)else 1f
     }
 
+    private fun descends(view:View,ancestor:View):Boolean {
+        var current=view.parent
+        var depth=0
+        while(current!=null && depth<32){
+            if(current===ancestor)return true
+            current=current.parent
+            depth++
+        }
+        return false
+    }
+
     fun captureIcon(canvas:Canvas,icon:Drawable,bounds:Rect,owner:View?,alpha:Int,mini:Boolean,mask:Bitmap):Boolean {
         val capture=active.get() ?: return false
         if(capture.canvas!==canvas || bounds.isEmpty)return false
-        capture.elements.add(Element(matrix(canvas),clip(canvas),chain(owner,capture.source),Rect(bounds),icon,alpha.coerceIn(0,255),mini,null))
+        val nested=owner!=null && owner!==capture.source && descends(owner,capture.source)
+        capture.elements.add(Element(matrix(canvas),clip(canvas),chain(owner,capture.source),Rect(bounds),icon,alpha.coerceIn(0,255),mini,null,nested))
         // Native layers recorded earlier stay hidden under the live plate,
         // exactly as they are hidden under the resting icon.
         punch.alpha=alpha.coerceIn(0,255)
@@ -181,7 +200,8 @@ internal object DragPreviewMaterial {
                 val surface=element.surface
                 if(icon!=null){
                     val iconAlpha=(element.iconAlpha*alpha).roundToInt().coerceIn(0,255)
-                    if(!live || !IconGlassHook.drawDragIcon(icon,canvas,element.bounds,owner!!,iconAlpha,element.mini))
+                    if(!live || !IconGlassHook.drawDragIcon(icon,canvas,element.bounds,owner!!,iconAlpha,element.mini,
+                            lift=!element.mini && !element.nested))
                         IconGlassHook.drawNativeIcon(icon,canvas,element.bounds,alpha)
                 }else if(surface!=null){
                     val surfaceAlpha=(surface.alpha*alpha).roundToInt().coerceIn(0,255)

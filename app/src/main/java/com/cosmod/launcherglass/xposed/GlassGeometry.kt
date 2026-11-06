@@ -62,8 +62,14 @@ internal object GlassGeometry {
         shape.depth?.let {return it}
         val w=shape.key.w;val h=shape.key.h;val alpha=shape.alpha
         // The distance field follows native smooth corners, including padding.
+        // Sub-pixel seeds: a pixel of coverage a has its centre about a-0.5 px
+        // inside the anti-aliased contour, i.e. a depth of a in this field
+        // (whose first full pixel behind a hard edge has depth 1). A binary
+        // (alpha>=128) seed snapped the contour to whole pixels, and the thin
+        // rim showed every step of that staircase on curved corners.
         val depth=FloatArray(alpha.size) {i ->
-            if((alpha[i].toInt() and 255)<128)0f
+            val a=(alpha[i].toInt() and 255)/255f
+            if(a<1f)a
             else if(i%w==0 || i%w==w-1 || i/w==0 || i/w==h-1)1f else 1e6f
         }
         val diagonal=1.41421356f
