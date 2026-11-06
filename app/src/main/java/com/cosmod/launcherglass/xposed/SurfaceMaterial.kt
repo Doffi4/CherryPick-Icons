@@ -134,7 +134,9 @@ internal object SurfaceMaterial {
              local:RectF?=null,fallback:android.graphics.drawable.Drawable?=null):Boolean {
         if(bounds.isEmpty)return false
         if(canvas.quickReject(bounds.left.toFloat(),bounds.top.toFloat(),bounds.right.toFloat(),bounds.bottom.toFloat()))return true
-        val sourceWallpaper=(if(style.folder)WallpaperHelper.getFolderWallpaper(view.context)else WallpaperHelper.getBlurredWallpaper(view.context)) ?: return false
+        // Clear glass (blur off) needs no wallpaper sample at all.
+        val clear=IconMaterialRenderer.clearGlass(style)
+        val sourceWallpaper=if(clear)null else (if(style.folder)WallpaperHelper.getFolderWallpaper(view.context)else WallpaperHelper.getBlurredWallpaper(view.context)) ?: return false
         // Native drag preview Picture: leave the footprint empty; the DragView
         // draws this material live (see DragPreviewMaterial).
         if(DragPreviewMaterial.captures(canvas) && DragPreviewMaterial.captureSurface(canvas,view,
@@ -142,29 +144,52 @@ internal object SurfaceMaterial {
         IconGlassHook.registerMaterialView(view)
         // The launcher may render a drag shadow to a software Canvas. A GPU
         // wallpaper cannot be sampled there; use the shared software snapshot.
-        val wallpaper=try {WallpaperHelper.forCanvas(sourceWallpaper,canvas)}catch(_:Exception){return false}
-        if(!canvas.isHardwareAccelerated && wallpaper.config==Bitmap.Config.HARDWARE)return false
+        val wallpaper=if(sourceWallpaper==null)null else try {WallpaperHelper.forCanvas(sourceWallpaper,canvas)}catch(_:Exception){return false}
+        if(wallpaper!=null && !canvas.isHardwareAccelerated && wallpaper.config==Bitmap.Config.HARDWARE)return false
         val shape=shape(bounds,radius,path,nativeShape,nativeMask,pathFingerprint,identity,view)
-        val world=Matrix()
-        try {XposedHelpers.callMethod(view,"transformMatrixToGlobal",world)}catch(_:Throwable){return false}
         val footprint=local ?: RectF(bounds)
-        val screen=RectF(footprint);world.mapRect(screen)
         val metrics=view.resources.displayMetrics
-        val source=WallpaperFootprint.source(wallpaper,metrics.widthPixels,metrics.heightPixels,screen)
+        val source=if(wallpaper==null)null else {
+            val world=Matrix()
+            try {XposedHelpers.callMethod(view,"transformMatrixToGlobal",world)}catch(_:Throwable){return false}
+            val screen=RectF(footprint);world.mapRect(screen)
+            WallpaperFootprint.source(wallpaper,metrics.widthPixels,metrics.heightPixels,screen)
+        }
+        val plateColor=style.plateColor ?: PrefsHelper.plateColor(SurfaceTone.base())
         val save=if(alpha<255)canvas.saveLayerAlpha(RectF(bounds),alpha)else canvas.save()
         try {
             canvas.translate(bounds.left.toFloat(),bounds.top.toFloat())
             canvas.scale(bounds.width().toFloat()/shape.mask.width,bounds.height().toFloat()/shape.mask.height)
             val local=Rect(0,0,shape.mask.width,shape.mask.height)
-            IconMaterialRenderer.draw(canvas,local,shape.mask,emptyGlyph,style.plateColor ?: PrefsHelper.iconPalette.background,
+            IconMaterialRenderer.draw(canvas,local,shape.mask,emptyGlyph,plateColor,
                 style.opacity*255/100,!decorate,wallpaper,source,
                 IconMaterialRenderer.Binding(view,identity,RectF(footprint),metrics.widthPixels,metrics.heightPixels,alpha=alpha,
-                    foreign=ForeignDraw.isForeign(view)),decorate,style) {target,rect,_ ->
+                    foreign=ForeignDraw.isForeign(view)),decorate,style) {target,rect,blurred ->
+                if(!blurred)clearPlate(target,rect,shape.mask,plateColor,style.opacity*255/100,decorate)
                 if(decorate && PrefsHelper.iconStroke && PrefsHelper.strokeOpacity>0)
                     target.drawBitmap(GlassGeometry.rim(shape.mask),null,rect,Paint(Paint.FILTER_BITMAP_FLAG))
             }
         }finally{canvas.restoreToCount(save)}
         return true
+    }
+    /** Clear-glass plate: the tint and the volume of the material, without a wallpaper sample. */
+    fun clearPlate(target:Canvas,rect:Rect,mask:Bitmap,color:Int,tintAlpha:Int,volume:Boolean){
+        val save=target.saveLayer(RectF(rect),null)
+        try {
+            val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
+            // The mask defines the layer's coverage; a zero tint keeps it invisible.
+            paint.colorFilter=PorterDuffColorFilter((tintAlpha.coerceIn(0,255) shl 24) or (color and 0xffffff),PorterDuff.Mode.SRC_IN)
+            target.drawBitmap(WallpaperHelper.forCanvas(mask,target),null,rect,paint)
+            if(volume && PrefsHelper.gradientOpacity>0){
+                paint.colorFilter=null
+                // The volume must be confined to the plate even with a fully clear tint.
+                paint.shader=ComposeShader(GlassVolume.shader(rect.height().toFloat(),PrefsHelper.gradientOpacity),
+                    BitmapShader(WallpaperHelper.forCanvas(mask,target),Shader.TileMode.CLAMP,Shader.TileMode.CLAMP).apply {
+                        setLocalMatrix(Matrix().apply {setRectToRect(RectF(0f,0f,mask.width.toFloat(),mask.height.toFloat()),RectF(rect),Matrix.ScaleToFit.FILL)})
+                    },PorterDuff.Mode.DST_IN)
+                target.drawRect(rect,paint)
+            }
+        }finally{target.restoreToCount(save)}
     }
     fun contour(canvas:Canvas,bounds:Rect,radius:Float,path:Path?=null,nativeMask:Bitmap?=null){
         if(!PrefsHelper.iconStroke || PrefsHelper.strokeOpacity<=0 || bounds.isEmpty)return

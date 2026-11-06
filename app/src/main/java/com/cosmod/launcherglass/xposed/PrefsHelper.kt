@@ -28,7 +28,19 @@ object PrefsHelper {
         private set
     @Volatile var optimizeMiniIcons=SettingsDefaults.boolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS)
         private set
-    @Volatile var liftedBackdrop=false
+    @Volatile var dockEnabled=false
+        private set
+    @Volatile var dockSidePadding=SettingsDefaults.integer(SettingsProvider.KEY_DOCK_SIDE_PADDING)
+        private set
+    @Volatile var dockVerticalPadding=SettingsDefaults.integer(SettingsProvider.KEY_DOCK_VERTICAL_PADDING)
+        private set
+    @Volatile var dockRadius=SettingsDefaults.integer(SettingsProvider.KEY_DOCK_RADIUS)
+        private set
+    @Volatile var dockAutoLength=SettingsDefaults.boolean(SettingsProvider.KEY_DOCK_AUTO_LENGTH)
+        private set
+    /** Transparency (0..100 %) of the tinted picture of plate-less icons; adjustable in developer mode. */
+    @Volatile var artworkTransparency=SettingsDefaults.integer(SettingsProvider.KEY_ARTWORK_TRANSPARENCY)
+    @Volatile var artworkDetection=false
         private set
     @Volatile var folderBlurEnabled: Boolean = SettingsDefaults.boolean(SettingsProvider.KEY_FOLDER_BLUR_ENABLED)
     @Volatile var folderIconsBlurEnabled=true
@@ -164,8 +176,19 @@ object PrefsHelper {
             val hazeChanged=newHaze!=hazeEnabled
             val newDisableEdgeOptimization=bundle.getBoolean(SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION,SettingsDefaults.boolean(SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION))
             val newOptimizeMiniIcons=bundle.getBoolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS,SettingsDefaults.boolean(SettingsProvider.KEY_OPTIMIZE_MINI_ICONS))
-            // Experimental: effective only while developer mode is on.
-            val newLiftedBackdrop=developer && bundle.getBoolean(SettingsProvider.KEY_LIFTED_BACKDROP,SettingsDefaults.boolean(SettingsProvider.KEY_LIFTED_BACKDROP))
+            val defaultArtwork=SettingsDefaults.integer(SettingsProvider.KEY_ARTWORK_TRANSPARENCY)
+            val newArtworkTransparency=if(developer)bundle.getInt(SettingsProvider.KEY_ARTWORK_TRANSPARENCY,defaultArtwork).coerceIn(0,100) else defaultArtwork
+            val artworkChanged=newArtworkTransparency!=artworkTransparency || developer!=artworkDetection
+            if(developer!=artworkDetection)IconBitmapProcessor.clearCache()
+            val newDockEnabled=bundle.getBoolean(SettingsProvider.KEY_DOCK_ENABLED,false)
+            val wasDockEnabled=dockEnabled
+            fun dockValue(key:String,max:Int)=bundle.getInt(key,SettingsDefaults.integer(key)).coerceIn(0,max)
+            val newDockSide=dockValue(SettingsProvider.KEY_DOCK_SIDE_PADDING,SettingsProvider.DOCK_PADDING_MAX)
+            val newDockVertical=dockValue(SettingsProvider.KEY_DOCK_VERTICAL_PADDING,SettingsProvider.DOCK_PADDING_MAX)
+            val newDockRadius=dockValue(SettingsProvider.KEY_DOCK_RADIUS,100)
+            val newDockAutoLength=bundle.getBoolean(SettingsProvider.KEY_DOCK_AUTO_LENGTH,SettingsDefaults.boolean(SettingsProvider.KEY_DOCK_AUTO_LENGTH))
+            val dockChanged=newDockEnabled!=dockEnabled || newDockSide!=dockSidePadding || newDockVertical!=dockVerticalPadding || newDockRadius!=dockRadius ||
+                newDockAutoLength!=dockAutoLength
             val newPhotoWidgetWidth=bundle.getInt(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH,SettingsDefaults.integer(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_WIDTH)).coerceIn(0,100)
             val newPhotoWidgetDistortion=bundle.getInt(SettingsProvider.KEY_PHOTO_WIDGET_LIQUID_DISTORTION,50).coerceIn(0,300)
             val widgetChanged=newPhotoWidgetBlur!=photoWidgetBlur || newPhotoWidgetOpacity!=photoWidgetOpacity || newPhotoWidgetTint!=photoWidgetTint ||
@@ -243,12 +266,12 @@ object PrefsHelper {
                 LiveBlurEngine.invalidate()
             }
             val folderEnabledChanged=newFolderBlurEnabled!=folderBlurEnabled
-            val materialChanged=backendChanged || newBgOpacity!=bgOpacity || newBlurEnabled!=blurEnabled ||
+            val materialChanged=backendChanged || newBgOpacity!=bgOpacity || newBlurEnabled!=blurEnabled || newBlurRadius!=blurRadius ||
                 newFolderBlurEnabled!=folderBlurEnabled || newFolderIconsBlurEnabled!=folderIconsBlurEnabled || newDrawerBlurEnabled!=drawerBlurEnabled ||
                 newIconStroke != iconStroke || newStrokeOpacity != strokeOpacity ||
                 newGlyphShadow != glyphShadow || newShadowOpacity != shadowOpacity ||
                 newGradientOpacity != gradientOpacity || glyphOutlineChanged || paletteChanged ||
-                blurColorsChanged || blurStyleChanged || geometryChanged || vibrancyChanged || widgetChanged || depthChanged || hazeChanged || newDisableEdgeOptimization!=disableEdgeOptimization || newOptimizeMiniIcons!=optimizeMiniIcons || newLiftedBackdrop!=liftedBackdrop
+                blurColorsChanged || blurStyleChanged || geometryChanged || vibrancyChanged || widgetChanged || depthChanged || hazeChanged || newDisableEdgeOptimization!=disableEdgeOptimization || newOptimizeMiniIcons!=optimizeMiniIcons || artworkChanged
 
             if (blurColorsChanged || paletteChanged || vibrancyChanged) {
                 blurSaturation = newBlurSaturation
@@ -264,7 +287,9 @@ object PrefsHelper {
             colorDepthStage=newDepthStage;hazeEnabled=newHaze
             disableEdgeOptimization=newDisableEdgeOptimization
             optimizeMiniIcons=newOptimizeMiniIcons
-            liftedBackdrop=newLiftedBackdrop
+            artworkTransparency=newArtworkTransparency;artworkDetection=developer
+            dockEnabled=newDockEnabled;dockSidePadding=newDockSide;dockVerticalPadding=newDockVertical;dockRadius=newDockRadius
+            dockAutoLength=newDockAutoLength
             folderBlurEnabled = newFolderBlurEnabled
             folderIconsBlurEnabled=newFolderIconsBlurEnabled
             drawerBlurEnabled = newDrawerBlurEnabled
@@ -289,6 +314,8 @@ object PrefsHelper {
             gradientOpacity = newGradientOpacity
             val folderChanged=FolderSettings.update(bundle)
             if(folderChanged || (FolderSettings.own && folderEnabledChanged))WallpaperHelper.invalidate()
+            val dockSettingsChanged=DockSettings.update(bundle)
+            if(dockSettingsChanged || (DockSettings.own && newDockEnabled!=wasDockEnabled))WallpaperHelper.invalidate()
             WallpaperHelper.onProcessingSettingsChanged()
             if(shadowToneChanged) WallpaperHelper.invalidate()
 
@@ -300,7 +327,8 @@ object PrefsHelper {
                 IconGlassHook.invalidateFolderPreviews()
                 IconGlassHook.invalidateActiveIcons()
             }
-            if (paletteChanged) {
+            if (paletteChanged || artworkChanged) {
+                DynamicIconForeground.clear()
                 IconBitmapProcessor.clearTintCache()
                 IconMaterialRenderer.clear()
                 IconGlassHook.invalidateFolderPreviews()
@@ -321,6 +349,7 @@ object PrefsHelper {
             LiftedBackdrop.onSettingsChanged()
             MultiIconMaterialHook.onSettingsChanged()
             PhotoWidgetMaterial.onSettingsChanged()
+            if(dockChanged || dockSettingsChanged || materialChanged || masterChanged)DockMaterial.onSettingsChanged()
             if(!enabled){
                 IconGlassHook.onModuleDisabled()
                 com.cosmod.launcherglass.util.LauncherWallpaperCapture.onModuleDisabled()

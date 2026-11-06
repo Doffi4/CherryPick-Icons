@@ -55,33 +55,50 @@ object WallpaperHelper {
 
 
 
-    @Volatile private var folderWallpaper:Bitmap?=null
-    private val folderCandidates=java.util.WeakHashMap<Bitmap,Bitmap>()
-    fun getFolderWallpaper(context:Context?=null):Bitmap? {
-        val shared=getBlurredWallpaper(context)
-        return if(com.cosmod.launcherglass.xposed.FolderSettings.own)folderWallpaper?.takeUnless {it.isRecycled} ?: shared else shared
+    /**
+     * Wallpaper processed with the own settings of a folder/dock scope. It is
+     * built next to every shared wallpaper candidate and published together
+     * with it, so both always come from the same frame.
+     */
+    private class OwnWallpaper(val settings:com.cosmod.launcherglass.xposed.ScopedGlassSettings,val enabled:()->Boolean,val tag:String) {
+        @Volatile var published:Bitmap?=null
+        val candidates=java.util.WeakHashMap<Bitmap,Bitmap>()
+        fun active()=settings.own && enabled() && PrefsHelper.enabled
     }
+    private val folderOwn=OwnWallpaper(com.cosmod.launcherglass.xposed.FolderSettings,{PrefsHelper.folderBlurEnabled},"FolderMaterial")
+    private val dockOwn=OwnWallpaper(com.cosmod.launcherglass.xposed.DockSettings,{PrefsHelper.dockEnabled},"DockMaterial")
+    private fun scoped(own:OwnWallpaper,context:Context?):Bitmap? {
+        val shared=getBlurredWallpaper(context)
+        return if(own.settings.own)own.published?.takeUnless {it.isRecycled} ?: shared else shared
+    }
+    fun getFolderWallpaper(context:Context?=null):Bitmap?=scoped(folderOwn,context)
+    fun getDockWallpaper(context:Context?=null):Bitmap?=scoped(dockOwn,context)
     private fun publishFolder(candidate:Bitmap){
-        folderWallpaper=synchronized(folderCandidates){folderCandidates.remove(candidate)}
+        for(own in listOf(folderOwn,dockOwn))own.published=synchronized(own.candidates){own.candidates.remove(candidate)}
     }
     private fun withFolder(candidate:Bitmap,raw:Bitmap):Bitmap {
-        val settings=com.cosmod.launcherglass.xposed.FolderSettings
-        if(!settings.own || !PrefsHelper.folderBlurEnabled || !PrefsHelper.enabled)return candidate
-        val options=settings.processing
+        for(own in listOf(folderOwn,dockOwn))if(own.active())withOwn(own,candidate,raw)
+        return candidate
+    }
+    private fun withOwn(own:OwnWallpaper,candidate:Bitmap,raw:Bitmap) {
+        val options=own.settings.processing
         val h=minOf(600+options.quality*12,raw.height)
         val w=(raw.width.toFloat()*h/raw.height).roundToInt().coerceAtLeast(1)
         val radius=options.radius*(h/800f)*(if(options.liquid).28f else 1f)
         val gpuImage=if(PrefsHelper.gpuEffects)try {
             val input=if(android.os.Build.VERSION.SDK_INT<33)BackdropVibrancy.applyCpu(raw,options.vibrancy)else raw
-            val gpu=try {GpuWallpaperBlur.blurFolder(input,w,h,radius,options.lightening,options.vibrancy)}finally{if(input!==raw)input.recycle()}
+            val gpu=try {
+                if(own===dockOwn)GpuWallpaperBlur.blurDock(input,w,h,radius,options.lightening,options.vibrancy)
+                else GpuWallpaperBlur.blurFolder(input,w,h,radius,options.lightening,options.vibrancy)
+            }finally{if(input!==raw)input.recycle()}
             if(ShadowTone.gpuSupported)gpu else ShadowTone.applyCpu(gpu,options.lightening).also {if(it!==gpu)gpu.recycle()}
         }catch(t:Throwable){
-            GlassLogger.e("FolderMaterial","Folder GPU processing unavailable; using CPU",t)
+            GlassLogger.e(own.tag,"Own GPU processing unavailable; using CPU",t)
             null
         }else null
         val image=gpuImage ?: run {
             val scaled=Bitmap.createScaledBitmap(raw,w,h,true)
-            val software=if(scaled.config==Bitmap.Config.HARDWARE)scaled.copy(Bitmap.Config.ARGB_8888,false) ?: return candidate else scaled
+            val software=if(scaled.config==Bitmap.Config.HARDWARE)scaled.copy(Bitmap.Config.ARGB_8888,false) ?: return else scaled
             val vivid=BackdropVibrancy.applyCpu(software,options.vibrancy)
             val input=ColorDepthEffect.atCpu(vivid,ColorDepthEffect.BEFORE_BLUR)
             val actualRadius=radius
@@ -96,8 +113,7 @@ object WallpaperHelper {
             if(scaled!==raw && scaled!==software)scaled.recycle()
             output
         }
-        synchronized(folderCandidates){folderCandidates[candidate]=image}
-        return candidate
+        synchronized(own.candidates){own.candidates[candidate]=image}
     }
     @Volatile private var blurredWallpaper: Bitmap? = null
 
@@ -139,7 +155,6 @@ object WallpaperHelper {
 
 
 
-    fun resetLiveFrameSignature() { liveFrameSignature = null }
 
 
 

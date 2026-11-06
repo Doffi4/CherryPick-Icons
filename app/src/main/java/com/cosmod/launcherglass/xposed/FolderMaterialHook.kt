@@ -77,6 +77,10 @@ internal object FolderMaterialHook {
         // after the drop a stale callback would map the folder plate onto the
         // detached DragView and route its invalidations there.
         var drawingHost:View?=null
+        // Set while OplusPreviewBackground.drawBackground(Canvas) runs: the
+        // canvas belongs to [drawingHost] and may be translated (a CellLayout
+        // delegated drawing places the plate at the hovered cell).
+        var localDraw=false
         override fun draw(canvas:Canvas){
             val host=callback as? View
             val view=drawingHost ?: host?.takeIf {it.background===this || (it as? ImageView)?.drawable===this} ?: source.get() ?: host ?: return
@@ -104,15 +108,15 @@ internal object FolderMaterialHook {
                 clip.accept(path,RectF(bounds))
                 if(!path.isEmpty)pathFingerprint=SurfaceMaterial.descriptor("smooth",System.identityHashCode(clip))
             }catch(_:Throwable){}
-            if(path.isEmpty && native!=null)try {
-                val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",view.context.classLoader)
-                XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",path,RectF(bounds),radius,radius,sx,sy)
-                if(!path.isEmpty)pathFingerprint=SurfaceMaterial.descriptor("icon",sx,sy)
-            }catch(_:Throwable){}
+            if(path.isEmpty && native!=null && NativeFolderPath.create(view,path,RectF(bounds),radius,sx,sy))
+                pathFingerprint=SurfaceMaterial.descriptor("icon",sx,sy)
             cachedBounds.set(bounds);cachedRadius=radius;cachedInfo=info;cachedSpanX=sx;cachedSpanY=sy;cachedRevision=geometryRevision
             }
             if(!logged){logged=true;GlassLogger.i("FolderMaterial","Native shape: radius=$radius, path=${!path.isEmpty}, bounds=$bounds, callback=${callback?.javaClass?.simpleName}")}
-            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint,fallback=fallback)){
+            @Suppress("DEPRECATION")
+            val local=if(localDraw && canvas.isHardwareAccelerated)RectF(bounds).also {canvas.matrix.mapRect(it)}else null
+            if(!SurfaceMaterial.draw(canvas,bounds,view,this,radius,path.takeUnless {it.isEmpty},alpha=opacity,style=style(source.get() ?: view),nativeShape=if(path.isEmpty)fallback else null,pathFingerprint=pathFingerprint,
+                    local=local,fallback=fallback)){
                 fallback?.bounds=bounds;fallback?.draw(canvas)
             }
         }
@@ -198,6 +202,17 @@ internal object FolderMaterialHook {
         }
         ModuleHooks.hookAllMethods(type,"drawBackground",object:XC_MethodHook(){
             override fun beforeHookedMethod(param:MethodHookParam){
+                if(com.cosmod.launcherglass.util.LauncherMethodResolver.isViewBackground(param.method as java.lang.reflect.Method,View::class.java)){
+                    // drawBackground(Canvas) also runs as a CellLayout delegated
+                    // drawing (folder creation / accept hover). The canvas then
+                    // belongs to the CellLayout, translated to the cell, so the
+                    // sample position must follow that view, not the folder icon.
+                    val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
+                    val host=(param.args.getOrNull(1) as? View) ?: (field(param.thisObject,"mDrawingDelegate") as? View) ?: field(param.thisObject,"mInvalidateDelegate") as? View
+                    material.drawingHost=host;material.localDraw=host!=null
+                    param.setObjectExtra("nativeViewBackground",true)
+                    return
+                }
                 if(param.args.size<2)return
                 val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
                 if(!enabled(material.source.get()))return
@@ -207,21 +222,44 @@ internal object FolderMaterialHook {
                 try {
                     // Native hover/resize hides mBgView and enters this overload.
                     // Its stock new-blur branch accepts only BlurTransitionDrawable.
-                    val bounds=XposedHelpers.callStaticMethod(type,"toConvertBgBounds",params,view) as? Rect ?: return
+                    val converter=type.declaredMethods.firstOrNull {it.name=="toConvertBgBounds" && it.parameterCount==2 &&
+                        it.parameterTypes[0].isInstance(params) && it.parameterTypes[1].isInstance(view)}
+                    val bounds=if(converter!=null){
+                        converter.isAccessible=true
+                        converter.invoke(null,params,view) as? Rect ?: return
+                    }else{
+                        fun number(name:String)=(NativeIconAccess.call(params,name) as Number).toFloat()
+                        val folder=XposedHelpers.findClassIfExists("com.android.launcher3.folder.FolderIcon",loader)
+                        val mirrored=folder?.isInstance(view)==true && field(view,"mIsResizeFrameShow")==true &&
+                            XposedHelpers.callStaticMethod(XposedHelpers.findClass("com.android.launcher3.Utilities",loader),"isRtl",view.resources)==true
+                        val legacy=com.cosmod.launcherglass.util.LegacyFolderBounds.from(number("getX"),number("getY"),
+                            number("getSizeX"),number("getSizeY"),view.width,mirrored)
+                        Rect(legacy.left,legacy.top,legacy.right,legacy.bottom)
+                    }
                     val radius=(XposedHelpers.callMethod(params,"getRadius") as? Number)?.toFloat() ?: return
                     val info=param.args.getOrNull(2) ?: view.tag
                     val sx=(info?.let {XposedHelpers.callMethod(it,"getSpanX")} as? Int) ?: 1
                     val sy=(info?.let {XposedHelpers.callMethod(it,"getSpanY")} as? Int) ?: 1
                     val shape=nativePath(view,bounds,radius,info,sx,sy)
                     val path=shape?.path ?: Path()
-                    val manager=XposedHelpers.findClass("com.android.launcher3.util.SmoothRoundedManager",loader)
-                    if(path.isEmpty)XposedHelpers.callStaticMethod(manager,"createIconFolderClipPath",path,RectF(bounds),radius,radius,sx,sy)
+                    if(path.isEmpty)NativeFolderPath.create(view,path,RectF(bounds),radius,sx,sy)
                     val fingerprint=shape?.descriptor ?: SurfaceMaterial.descriptor("icon",sx,sy)
-                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path,alpha=material.alpha,style=style(view),pathFingerprint=fingerprint)){
+                    if(SurfaceMaterial.draw(canvas,bounds,view,material,radius,path.takeUnless {it.isEmpty},alpha=material.alpha,
+                        style=style(view),nativeShape=if(path.isEmpty)material.fallback else null,pathFingerprint=fingerprint,fallback=material.fallback)){
                         if(converted.put(param.thisObject,true)==null)GlassLogger.i("FolderMaterial","Native hover/resize material: bounds=$bounds, radius=$radius")
-                        param.result=null
+                    }else{
+                        val fallback=material.fallback ?: return
+                        val old=Rect(fallback.bounds)
+                        val saved=canvas.saveLayerAlpha(RectF(bounds),material.alpha)
+                        try {fallback.bounds=bounds;fallback.draw(canvas)}finally{fallback.bounds=old;canvas.restoreToCount(saved)}
                     }
-                }catch(t:Throwable){GlassLogger.e("FolderMaterial","Converted native material failed",t)}
+                    param.result=null
+                }catch(t:Throwable){GlassLogger.limited("FolderMaterial","convertedFailure"){"Converted native material unavailable; stock draw kept: ${t.javaClass.simpleName}: ${t.message}"}}
+            }
+            override fun afterHookedMethod(param:MethodHookParam){
+                if(param.getObjectExtra("nativeViewBackground")!=true)return
+                val material=field(param.thisObject,"mBgDrawable") as? Material ?: return
+                material.drawingHost=null;material.localDraw=false
             }
         })
         ModuleHooks.hookAllMethods(type,"initBgDrawable",object:XC_MethodHook(){

@@ -51,8 +51,9 @@ object IconMaterialRenderer {
         var finish=-1
         val clock=SampleFrameClock()
     }
-    private val cpuFrames=object:LruCache<Key,CpuFrame>(16*1024*1024){
-        override fun sizeOf(key:Key,value:CpuFrame)=(value.bitmap?.allocationByteCount ?: key.width*key.height*4)+128
+    private data class CpuFrameKey(val material:Key,val owner:CpuFrameOwner?,val source:RectF?)
+    private val cpuFrames=object:LruCache<CpuFrameKey,CpuFrame>(16*1024*1024){
+        override fun sizeOf(key:CpuFrameKey,value:CpuFrame)=(value.bitmap?.allocationByteCount ?: key.material.width*key.material.height*4)+128
     }
     /**
      * [lift]=false keeps the plain wallpaper sample inside a DragView (folder preview items).
@@ -60,7 +61,7 @@ object IconMaterialRenderer {
      * again into its own node; [local] is then relative to that node.
      */
     data class Binding(val view:View,val drawable:Drawable,val local:RectF,val screenW:Int,val screenH:Int,val mini:Boolean=false,val alpha:Int=255,val lift:Boolean=true,val foreign:Boolean=false)
-    private class Sampler(val node:RenderNode,var material:Material,var local:RectF,val screenW:Int,val screenH:Int,var style:GlassStyle){
+    private class Sampler(val node:RenderNode,var material:Material,var local:RectF,var screenW:Int,var screenH:Int,var style:GlassStyle){
         val world=Matrix()
         var worldValid=false
         var scroll=Float.NaN
@@ -304,11 +305,19 @@ object IconMaterialRenderer {
     @Synchronized fun draw(
         canvas: Canvas, bounds: Rect, mask: Bitmap, glyph: Bitmap,
         color: Int, tintAlpha: Int, hideGlyph: Boolean,
-        wallpaper: Bitmap?, source: RectF?,binding:Binding?=null,volume:Boolean=true,style:GlassStyle=GlassStyle.icons(),buildOverlay: (Canvas, Rect, Boolean) -> Unit
+        sampleWallpaper: Bitmap?, sampleSource: RectF?,binding:Binding?=null,volume:Boolean=true,style:GlassStyle=GlassStyle.icons(),buildOverlay: (Canvas, Rect, Boolean) -> Unit
     ) {
         val width = bounds.width()
         val height = bounds.height()
         if (width <= 0 || height <= 0) return
+        // Blur switched off (radius 0): clear glass. No wallpaper sample at all,
+        // neither the blurred Frosted copy nor the Liquid lens: the only source
+        // is a low-resolution wallpaper screenshot, which itself looked blurred.
+        // The overlay (plate tint, volume, rim) stays; the real wallpaper shows
+        // through the translucent plate in full resolution.
+        val clear = clearGlass(style)
+        val wallpaper = if (clear) null else sampleWallpaper
+        val source = if (clear) null else sampleSource
         val blurred = wallpaper != null && source != null
         val key = Key(mask, glyph, width, height, color, tintAlpha, hideGlyph, blurred,
             if(volume)PrefsHelper.gradientOpacity else 0,
@@ -318,8 +327,11 @@ object IconMaterialRenderer {
             if (PrefsHelper.glyphStroke) PrefsHelper.glyphStrokeWidth else 0,
             if (PrefsHelper.glyphStroke) PrefsHelper.glyphStrokeBrightness else 0,PrefsHelper.colorDepthBits,PrefsHelper.colorDepthStage)
         if(!PrefsHelper.gpuEffects && canvas.isHardwareAccelerated){
-            var frame=cpuFrames.get(key)
-            if(frame==null){frame=CpuFrame();cpuFrames.put(key,frame)}
+            // Identical icons can occupy different wallpaper regions and need independent FPS clocks.
+            val frameKey=CpuFrameKey(key,binding?.let {CpuFrameOwner(it.view,it.drawable)},
+                if(binding==null)source?.let(::RectF)else null)
+            var frame=cpuFrames.get(frameKey)
+            if(frame==null){frame=CpuFrame();cpuFrames.put(frameKey,frame)}
             if(binding?.foreign==true)frame.bitmap?.let {canvas.drawBitmap(it,null,bounds,outputPaint);return}
             var footprint=source
             if(binding!=null && wallpaper!=null && !binding.foreign){
@@ -363,6 +375,7 @@ object IconMaterialRenderer {
                 }
                 if (key.gradient > 0) {
                     val gradient = com.cosmod.launcherglass.util.GlassVolume.shader(height.toFloat(), key.gradient)
+                    paint.isDither = true
                     paint.shader = ComposeShader(gradient, maskShader, PorterDuff.Mode.DST_IN)
                     target.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 }
@@ -420,6 +433,10 @@ object IconMaterialRenderer {
                         sampler.source=null;sampler.wallpaper=null;sampler.appliedStyle=null;sampler.worldValid=false
                     }
                     if(sampler.local!=binding.local){sampler.local.set(binding.local);sampler.worldValid=false}
+                    if(sampler.screenW!=binding.screenW || sampler.screenH!=binding.screenH){
+                        sampler.screenW=binding.screenW;sampler.screenH=binding.screenH
+                        sampler.source=null;sampler.worldValid=false
+                    }
                     sampler.style=style;sampler.plateNode=depthNode;sampler.mini=binding.mini;sampler.bound=frameSerial
                     ensureContents(sampler)
                     val rect=RectF(binding.local)
@@ -507,6 +524,9 @@ object IconMaterialRenderer {
             GlassLogger.i("IconMaterial", "Cached icon material: draws=$draws, builds=$builds, bytes=${cache.size()}")
         }
     }
+
+    /** Clear glass: the blur of this material is switched off. */
+    fun clearGlass(style:GlassStyle)=style.radius<=0
 
     /** The sampler an element's own draw bound for [material], preferring its latest. */
     private fun foreignSampler(binding:Binding,material:Material,width:Int,height:Int):Sampler? {
@@ -676,6 +696,9 @@ object IconMaterialRenderer {
         lift.toDrag.postTranslate(dragView.scrollX.toFloat(),dragView.scrollY.toFloat())
 
         val style=sampler.style
+        // Clear glass never uses a lifted blur or liquid lens, even if an old
+        // sampler survives the preference transition for one frame.
+        if(clearGlass(style))return false
         val scale=toNode.mapRadius(1f).coerceIn(.05f,20f)
         val screenRadius=style.radius.coerceIn(0,50)*sampler.screenH/800f*(if(style.liquid).28f else 1f)
         val radius=kotlin.math.round(screenRadius*scale*4f)/4f

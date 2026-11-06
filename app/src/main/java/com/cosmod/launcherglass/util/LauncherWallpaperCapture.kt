@@ -34,17 +34,7 @@ object LauncherWallpaperCapture {
         }
         if (!hasConstructor) return false
 
-        val hasStartMethod = type.declaredMethods.any { method ->
-            method.parameterTypes.size == 1 && method.parameterTypes[0].isInterface &&
-                method.parameterTypes[0].methods.any { callback -> callback.parameterTypes.any { it == Bitmap::class.java } }
-        }
-        if (!hasStartMethod) return false
-
-        val hasStopMethod = type.declaredMethods.any { method ->
-            method.parameterTypes.contentEquals(arrayOf(Boolean::class.javaPrimitiveType)) &&
-                method.returnType == java.lang.Void.TYPE
-        }
-        return hasStopMethod
+        return LauncherMethodResolver.wallpaperFactory(type,Bitmap::class.java)!=null
     }
 
     private fun findCaptureClass(context: Context): Class<*>? {
@@ -95,20 +85,16 @@ object LauncherWallpaperCapture {
         apiResolved=true
         return try {
             val type = findCaptureClass(context) ?: error("Wallpaper factory class unavailable")
-            val start=type.declaredMethods.firstOrNull { method ->
-                method.parameterTypes.size==1 && method.parameterTypes[0].isInterface &&
-                    method.parameterTypes[0].methods.any { callback -> callback.parameterTypes.any { it==Bitmap::class.java } }
-            } ?: error("Wallpaper bitmap callback unavailable")
+            val methods=LauncherMethodResolver.wallpaperFactory(type,Bitmap::class.java)
+                ?: error("Wallpaper subscription API ambiguous or unavailable")
+            val start=methods.subscribe
             val callback=start.parameterTypes[0]
-            val frame=callback.methods.first { method -> method.parameterTypes.any { it==Bitmap::class.java } }
-            val stop=type.declaredMethods.first { method ->
-                method.parameterTypes.contentEquals(arrayOf(Boolean::class.javaPrimitiveType)) &&
-                    method.returnType==Void.TYPE
-            }
+            val frame=methods.frame
+            val stop=methods.release
             start.isAccessible=true;stop.isAccessible=true
             CaptureApi(type,callback,frame.name,start,stop).also {
                 captureApi=it
-                GlassLogger.i("WallpaperCapture","Resolved native capture callback: ${callback.name} in ${type.name}")
+                GlassLogger.i("WallpaperCapture","Native capture: ${type.name}.${start.name} -> ${callback.name}.${frame.name}, release=${stop.name}")
             }
         } catch(t:Throwable) {
             GlassLogger.i("WallpaperCapture","Native capture API unavailable on this launcher: ${t.message}")
@@ -127,6 +113,7 @@ object LauncherWallpaperCapture {
     private var surfaceRetries = 0
     private var awaitingUnlock=false
     private var staticMotionUntilMs=0L
+    private var staticWallpaper=false
 
     fun onScreenOff() {
         GlassLogger.i("WallpaperCapture","Screen off -> pause capture")
@@ -154,7 +141,7 @@ object LauncherWallpaperCapture {
         override fun run() {
             if (motionFactory == null) return
             val now = SystemClock.uptimeMillis()
-            if ((PrefsHelper.idlePause && motionState.isSettled(now)) ||
+            if (motionState.shouldStop(now,PrefsHelper.idlePause,staticWallpaper,staticMotionUntilMs) ||
                 (now - watchStartedMs > 2500L && lastFrameMs < watchStartedMs)) {
                 stopMotionWatch()
             } else main.postDelayed(this, 100L)
@@ -223,7 +210,8 @@ object LauncherWallpaperCapture {
         val now = SystemClock.uptimeMillis()
         // Static ImageWallpaper also moves during ColorOS unlock. Capture that
         // short transition, without running a permanent static-wallpaper watch.
-        if(now>=staticMotionUntilMs && try { WallpaperManager.getInstance(context).wallpaperInfo == null } catch (_: Throwable) { true }) return
+        staticWallpaper=try { WallpaperManager.getInstance(context).wallpaperInfo == null } catch (_: Throwable) { true }
+        if(now>=staticMotionUntilMs && staticWallpaper)return
         val api=api(context) ?: return
         if (motionFactory != null) {
             motionState.wake(now)
@@ -245,7 +233,6 @@ object LauncherWallpaperCapture {
             watchStartedMs = now
             lastFrameMs = 0L
             motionState = WallpaperMotionState().apply { wake(now) }
-            WallpaperHelper.resetLiveFrameSignature()
             val listener = Proxy.newProxyInstance(callback.classLoader, arrayOf(callback)) { proxy, method, args ->
                 when (method.name) {
                     "hashCode" -> System.identityHashCode(proxy)

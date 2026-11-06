@@ -5,6 +5,7 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import java.lang.reflect.Member
 import java.lang.reflect.Method
+import com.cosmod.launcherglass.util.GlassLogger
 
 /** Settings/bootstrap observers stay installed; rendering/animation hooks exist only while enabled. */
 internal object ModuleHooks {
@@ -18,8 +19,14 @@ internal object ModuleHooks {
     fun hookMethod(method:Method,callback:XC_MethodHook)=hookMember(method,callback)
     @Synchronized fun hookMember(method:Member,callback:XC_MethodHook){
         val entry=Entry(method,callback)
-        if(active)entry.handle=XposedBridge.hookMethod(method,callback)
+        if(active)update(entry,true)
         entries.add(entry)
+    }
+    private fun update(entry:Entry,enabled:Boolean){
+        try {
+            if(enabled){if(entry.handle==null)entry.handle=XposedBridge.hookMethod(entry.method,entry.callback)}
+            else {entry.handle?.unhook();entry.handle=null}
+        }catch(t:Throwable){GlassLogger.e("Compat","Cannot ${if(enabled)"enable" else "disable"} hook ${entry.method}; remaining hooks continue",t)}
     }
     fun hookAllConstructors(type:Class<*>,callback:XC_MethodHook){
         type.declaredConstructors.forEach {hookMember(it,callback)}
@@ -41,9 +48,6 @@ internal object ModuleHooks {
         if(active==enabled)return
         active=enabled
         if(enabled)epoch++
-        for(entry in entries){
-            if(enabled)entry.handle=XposedBridge.hookMethod(entry.method,entry.callback)
-            else {entry.handle?.unhook();entry.handle=null}
-        }
+        for(entry in entries)update(entry,enabled)
     }
 }

@@ -9,31 +9,75 @@ import kotlin.math.sqrt
 data class ProcessedIcon(
     val glyphBitmap: Bitmap,
     val plateMaskBitmap: Bitmap,
-    val bgColor: Int
+    val bgColor: Int,
+    val origin: IconOrigin = IconOrigin.PLATE,
+    val artwork: ArtworkSource? = null
 )
 
 object IconBitmapProcessor {
 
     private data class CachedIcon(val generation: Int, val icon: ProcessedIcon?,
-        var palette: com.cosmod.launcherglass.util.IconPalette? = null, var colored: ProcessedIcon? = null)
+        var palette: com.cosmod.launcherglass.util.IconPalette? = null, var colored: ProcessedIcon? = null, var artworkTransparency: Int = -1)
     private val cache = WeakHashMap<Bitmap, CachedIcon>()
     private val layeredSources=WeakHashMap<Bitmap,Boolean>()
     @Synchronized fun markLayeredSource(bitmap:Bitmap){
         if(layeredSources.put(bitmap,true)!=true)cache.remove(bitmap)
     }
-    @Synchronized fun clearTintCache() { cache.values.forEach { it.palette = null; it.colored = null } }
+    @Synchronized fun clearTintCache() { cache.values.forEach { it.palette = null; it.colored = null; it.artworkTransparency = -1 } }
     private fun applyPalette(cached: CachedIcon): ProcessedIcon? {
         val icon = cached.icon ?: return null
         val palette = PrefsHelper.iconPalette
+        if (icon.origin == IconOrigin.ARTWORK) return artwork(cached, icon, palette)
         if (!palette.custom && !palette.whiteGlyph) return icon
         if (cached.palette == palette) return cached.colored
         val glyph = Bitmap.createBitmap(icon.glyphBitmap.width, icon.glyphBitmap.height, Bitmap.Config.ARGB_8888)
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { colorFilter = palette.filter }
         android.graphics.Canvas(glyph).drawBitmap(icon.glyphBitmap, 0f, 0f, paint)
-        return ProcessedIcon(glyph, icon.plateMaskBitmap, if(palette.custom)palette.background else icon.bgColor).also {
+        return ProcessedIcon(glyph, icon.plateMaskBitmap, if(palette.custom)palette.background else icon.bgColor, icon.origin).also {
             cached.palette = palette; cached.colored = it
         }
     }
+    /** Pictures without a plate colour: a translucent copy of the picture over the glass plate. */
+    private fun artwork(cached: CachedIcon, icon: ProcessedIcon, palette: com.cosmod.launcherglass.util.IconPalette): ProcessedIcon? {
+        val transparency = PrefsHelper.artworkTransparency
+        if (cached.palette == palette && cached.artworkTransparency == transparency) return cached.colored
+        val plate = if (palette.custom) palette.background else icon.bgColor
+        val source = icon.artwork
+        val result = if (source == null || source.picture.isRecycled) null else {
+            val glyph = Bitmap.createBitmap(source.picture.width, source.picture.height, Bitmap.Config.ARGB_8888)
+            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply {
+                colorFilter = android.graphics.ColorMatrixColorFilter(tint(palette, source, 1f - transparency / 100f))
+            }
+            android.graphics.Canvas(glyph).drawBitmap(source.picture, 0f, 0f, paint)
+            ProcessedIcon(glyph, icon.plateMaskBitmap, plate, icon.origin, source)
+        }
+        cached.palette = palette; cached.artworkTransparency = transparency; cached.colored = result
+        return result
+    }
+
+    /**
+     * Translucent picture: luminance maps onto the active palette's
+     * dark..light tones. The glass plate shows through the remaining alpha.
+     */
+    private fun tint(palette: com.cosmod.launcherglass.util.IconPalette, source: ArtworkSource, alpha: Float): android.graphics.ColorMatrix {
+        val dark = palette.background
+        val light = palette.foreground
+        fun mix(channel: Int, toWhite: Float) = channel + (255 - channel) * toWhite
+        val darkRgb = floatArrayOf(android.graphics.Color.red(dark) * .55f, android.graphics.Color.green(dark) * .55f, android.graphics.Color.blue(dark) * .55f)
+        val lightRgb = floatArrayOf(mix(android.graphics.Color.red(light), .25f), mix(android.graphics.Color.green(light), .25f), mix(android.graphics.Color.blue(light), .25f))
+        val range = (source.high - source.low).coerceAtLeast(1).toFloat()
+        val values = FloatArray(20)
+        for (row in 0 until 3) {
+            val span = (lightRgb[row] - darkRgb[row]) / range
+            values[row * 5] = span * .299f
+            values[row * 5 + 1] = span * .587f
+            values[row * 5 + 2] = span * .114f
+            values[row * 5 + 4] = darkRgb[row] - span * source.low
+        }
+        values[18] = alpha
+        return android.graphics.ColorMatrix(values)
+    }
+
     private var cachedOpacity: Int = -1
     private var processLogCount = 0
 
@@ -68,6 +112,21 @@ object IconBitmapProcessor {
         val entry = CachedIcon(src.generationId, processed)
         cache[src] = entry
         return applyPalette(entry)
+    }
+
+    private var fallbackLogCount = 0
+    private fun fallback(pixels: IntArray, width: Int, height: Int, origin: IconOrigin): ProcessedIcon? {
+        val result = try {
+            if (origin == IconOrigin.ARTWORK) IconFallbackLayers.artwork(pixels, width, height)
+            else IconFallbackLayers.alphaGlyph(pixels, width, height)
+        } catch (t: Throwable) {
+            GlassLogger.e("IconProcessor", "Fallback layers failed", t); null
+        }
+        if (fallbackLogCount < 12) {
+            fallbackLogCount++
+            GlassLogger.i("IconProcessor", "No flat plate in ${width}x$height icon: ${origin.name.lowercase(java.util.Locale.ROOT)} layers ${if (result != null) "built" else "rejected, stock icon kept"}")
+        }
+        return result
     }
 
     private fun processIcon(src: Bitmap, bgOpacity: Int): ProcessedIcon? {
@@ -132,7 +191,8 @@ object IconBitmapProcessor {
                 }
             }
         }
-        if (opaqueCount < if(layeredSources[src]==true)8 else 50) return null
+        if (opaqueCount < if(layeredSources[src]==true)8 else 50)
+            return if(layeredSources[src]==true) null else fallback(pixels,width,height,IconOrigin.ALPHA_GLYPH)
         var maxBucketCount = 0
         var topKey = -1
         for (i in buckets.indices) {
@@ -142,7 +202,15 @@ object IconBitmapProcessor {
             }
         }
         val topRatio = maxBucketCount.toFloat() / opaqueCount
-        if (topRatio < 0.10f || topKey < 0) return null
+        if (topRatio < 0.10f || topKey < 0) return if (layeredSources[src] == true) null else fallback(pixels, width, height, IconOrigin.ARTWORK)
+        // A photo/illustration can have one relatively common colour (sky,
+        // hair, etc.) without having a flat plate. Require both a weak dominant
+        // bucket and many populated colours, leaving clean glyph icons alone.
+        if(PrefsHelper.artworkDetection && layeredSources[src]!=true && topRatio<0.24f) {
+            val minimum=(opaqueCount/12000).coerceAtLeast(2)
+            val populated=buckets.count {it>=minimum}
+            if(populated>=160)return fallback(pixels,width,height,IconOrigin.ARTWORK)
+        }
         var sumR = 0L
         var sumG = 0L
         var sumB = 0L
@@ -191,7 +259,7 @@ object IconBitmapProcessor {
             }
         }
 
-        if (maxDist < 25.0) return null
+        if (maxDist < 25.0) return if (layeredSources[src] == true) null else fallback(pixels, width, height, IconOrigin.ALPHA_GLYPH)
 
         val bgThreshold = max(16.0, maxDist * 0.08)
         val glyphPixels = IntArray(pixels.size)

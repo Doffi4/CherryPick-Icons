@@ -53,6 +53,7 @@
     <string name="ui_energy_saving_description">Pause while the wallpaper and screen are still</string>
     <string name="ui_logs">Diagnostics · logs</string>
     <string name="ui_support_project">Support the project</string>
+    <string name="ui_support_project_button">Support\nthe project</string>
     <string name="ui_author_profile">by @immorgue — Telegram profile</string>
     <string name="ui_telegram_error">Could not open Telegram</string>
     <string name="ui_restart_launcher">Restart launcher</string>
@@ -79,6 +80,13 @@
     <string name="ui_share_logs">Share diagnostic log</string>
     <string name="ui_blur_vibrancy">Backdrop vibrancy</string>
     <string name="ui_blur_vibrancy_hint">Boosts the wallpaper colors beneath the blur while keeping dark areas dark. Reduces color suppression from tinting.</string>
+    <string name="ui_dock">Dock</string>
+    <string name="ui_dock_auto_length">Automatic length</string>
+    <string name="ui_dock_size">Size</string>
+    <string name="ui_dock_side_padding">Side padding</string>
+    <string name="ui_dock_vertical_padding">Top and bottom padding</string>
+    <string name="ui_dock_radius">Corner radius</string>
+    <string name="ui_dock_radius_hint">Default — 52, icon rounding — 40.</string>
     <string name="ui_widgets">Widgets</string>
     <string name="ui_photo_widget_blur">Photo widget blur</string>
     <string name="ui_photo_widget_opacity">Photo opacity</string>
@@ -91,9 +99,10 @@
     <string name="ui_color_depth">Limit blur color depth</string>
     <string name="ui_optimize_mini_icons">Folder mini-icons: 30 FPS</string>
     <string name="ui_optimize_mini_icons_hint">Limits small icons in 1×1 folders and tiny previews in large folders to 30 FPS. Blur and refraction stay enabled. Large icons follow the global blur limit; limits below 30 FPS also apply to miniatures.</string>
+    <string name="ui_artwork_icons">Icons without a plate (experimental)</string>
+    <string name="ui_artwork_transparency">Tint transparency</string>
+    <string name="ui_artwork_icons_hint">For icons that are a full picture without a single-colour plate (games, photos, gradients): the picture is recoloured into the palette tones and the glass shows through it. Works in developer mode.</string>
     <string name="ui_color_depth_bits">Color depth</string>
-    <string name="ui_lifted_backdrop">Live backdrop under dragged items (experimental)</string>
-    <string name="ui_lifted_backdrop_hint">Off by default and not verified on devices. While an icon or folder is dragged, its glass blurs the launcher layers below it, not only the wallpaper (photo widgets keep the wallpaper blur). If the launcher stops during a drag, the effect is switched off until the next reboot or module update. Turn it off if dragging becomes unstable; restart the launcher afterwards to remove its observers completely.</string>
     <string name="ui_md3_interface">Material 3 interface (experimental)</string>
     <string name="ui_md3_interface_hint">Standard Material 3 layout for this settings app: top app bar, list rows with switches and supporting text, reset with confirmation. Changes only this screen; the classic interface stays the default. Active while developer mode is on; if the app crashes with it, it switches itself off.</string>
     <string name="ui_reset_defaults">Reset to defaults</string>

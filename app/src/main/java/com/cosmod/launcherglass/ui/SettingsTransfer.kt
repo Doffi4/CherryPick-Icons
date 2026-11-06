@@ -12,16 +12,15 @@ internal object SettingsTransfer {
     private const val MAX_BYTES = 64 * 1024
     private val defaults get() = SettingsDefaults.portable()
 
-    private fun optionalFolder(key: String) = key != FolderSettingsKeys.OWN &&
-        (key in FolderSettingsKeys.integers.map(FolderSettingsKeys::key) ||
-            key in FolderSettingsKeys.booleans.map(FolderSettingsKeys::key))
+    /** Scoped (folder/dock) glass keys: absence means "inherit the icon value". */
+    private fun optionalScoped(key: String) = !ScopedSettingsKeys.isOwnKey(key) && ScopedSettingsKeys.baseOf(key) != null
 
     fun export(prefs: SharedPreferences): String {
         val values = JSONObject()
         val saved = prefs.all
         for ((key, default) in defaults.toSortedMap()) {
             // Absence means inherit the icon value, and must survive a round trip.
-            if (optionalFolder(key) && !saved.containsKey(key)) continue
+            if (optionalScoped(key) && !saved.containsKey(key)) continue
             values.put(key, saved[key] ?: default)
         }
         return JSONObject().put("format", FORMAT).put("version", VERSION)
@@ -66,7 +65,7 @@ internal object SettingsTransfer {
     }
 
     private fun range(key: String): LongRange {
-        val base = if (key.startsWith("folder_")) key.removePrefix("folder_") else key
+        val base = ScopedSettingsKeys.baseOf(key) ?: key
         return when (base) {
             SettingsProvider.KEY_COLOR_HUE, SettingsProvider.KEY_LIGHT_HUE, SettingsProvider.KEY_DARK_HUE -> 0L..360L
             SettingsProvider.KEY_BLUR_SATURATION, SettingsProvider.KEY_BLUR_VIBRANCY -> 0L..200L
@@ -75,6 +74,7 @@ internal object SettingsTransfer {
             SettingsProvider.KEY_LIVE_FPS -> 1L..60L
             SettingsProvider.KEY_COLOR_DEPTH_BITS -> 8L..24L
             SettingsProvider.KEY_COLOR_DEPTH_STAGE -> 0L..3L
+            SettingsProvider.KEY_DOCK_SIDE_PADDING, SettingsProvider.KEY_DOCK_VERTICAL_PADDING -> 0L..SettingsProvider.DOCK_PADDING_MAX.toLong()
             SettingsProvider.KEY_BLUR_MODE, SettingsProvider.KEY_BLUR_STYLE,
             SettingsProvider.KEY_ICON_APPEARANCE, SettingsProvider.KEY_COLOR_MODE -> 0L..1L
             else -> 0L..100L
@@ -85,7 +85,7 @@ internal object SettingsTransfer {
         val editor = prefs.edit()
         // Complete replacement of portable settings; retain local state and migration markers.
         for ((key, default) in defaults) {
-            val value = values[key] ?: if (optionalFolder(key)) null else default
+            val value = values[key] ?: if (optionalScoped(key)) null else default
             when (value) {
                 is Boolean -> editor.putBoolean(key, value)
                 is Int -> editor.putInt(key, value)

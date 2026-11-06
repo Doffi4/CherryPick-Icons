@@ -17,7 +17,8 @@ import java.lang.reflect.Field
 import java.util.WeakHashMap
 
 /**
- * Experimental live backdrop for a lifted (dragged) launcher element.
+ * Live backdrop for a lifted (dragged) launcher element. Built in since
+ * 0.2.43 (previously a developer opt-in); the safeguards below stay.
  *
  * The element's own display list never references launcher layers: its
  * wallpaper sample sits behind an indirection node that is emptied while a
@@ -57,13 +58,13 @@ internal object LiftedBackdrop {
     private var drawDepth=0
     private val main get()=Looper.myLooper()===Looper.getMainLooper()
 
-    /** Remembers the launcher loader; hooks are registered only once the toggle is enabled. */
+    /** Remembers the launcher loader; hooks are registered after the first preference load. */
     fun install(loader:ClassLoader){
         if(Build.VERSION.SDK_INT>=33)this.loader=loader
     }
-    /** Called after preferences load: registers the observers on first opt-in. */
+    /** Called after preferences load: registers the observers once the module is enabled. */
     fun onSettingsChanged(){
-        if(!PrefsHelper.enabled || !PrefsHelper.liftedBackdrop || registered || Looper.myLooper()!==Looper.getMainLooper())return
+        if(!PrefsHelper.enabled || registered || Looper.myLooper()!==Looper.getMainLooper())return
         val loader=loader ?: return
         registered=true
         register(loader)
@@ -83,7 +84,7 @@ internal object LiftedBackdrop {
             ModuleHooks.hookAllConstructors(drag,object:XC_MethodHook(){
                 override fun afterHookedMethod(param:MethodHookParam){
                     val view=param.thisObject as? View ?: return
-                    if(main && PrefsHelper.liftedBackdrop)dragViews[view]=ModuleHooks.epoch
+                    if(main)dragViews[view]=ModuleHooks.epoch
                 }
             })
             val hostHook=object:XC_MethodHook(){
@@ -91,7 +92,7 @@ internal object LiftedBackdrop {
                     if(!main)return
                     // OplusDragView.draw() calls DragView.draw(): place one host
                     // per recording, before the content and spring drawables.
-                    if(drawDepth++!=0 || !PrefsHelper.liftedBackdrop)return
+                    if(drawDepth++!=0)return
                     val view=param.thisObject as? View ?: return
                     val canvas=param.args.getOrNull(0) as? Canvas ?: return
                     try {
@@ -106,7 +107,11 @@ internal object LiftedBackdrop {
             val releaseHook=object:XC_MethodHook(){
                 override fun beforeHookedMethod(param:MethodHookParam){
                     val view=param.thisObject as? View ?: return
-                    if(main)IconMaterialRenderer.releaseLifts(view)
+                    if(!main)return
+                    IconMaterialRenderer.releaseLifts(view)
+                    // A detached DragView is never drawn again: let the global
+                    // View.draw observer return early as soon as no drag is alive.
+                    if(param.method.name=="onDetachedFromWindow"){dragViews.remove(view);poisoned.remove(view)}
                 }
             }
             var hosts=0
@@ -176,7 +181,7 @@ internal object LiftedBackdrop {
         "${Settings.Global.getInt(context.contentResolver,Settings.Global.BOOT_COUNT,-1)}:${BuildConfig.VERSION_CODE}"
 
     fun allowed()=installed && prepared && !broken && !lockedOut && Build.VERSION.SDK_INT>=33 &&
-        PrefsHelper.enabled && PrefsHelper.blurEnabled && PrefsHelper.gpuEffects && PrefsHelper.liftedBackdrop &&
+        PrefsHelper.enabled && PrefsHelper.blurEnabled && PrefsHelper.gpuEffects &&
         ModuleHooks.isActive && !ColorDepthEffect.finalPlate
 
     /** The DragView was observed from construction without a hook gap and never drawn foreign. */

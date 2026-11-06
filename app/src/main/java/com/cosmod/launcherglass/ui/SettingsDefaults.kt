@@ -5,7 +5,7 @@ object SettingsDefaults {
     fun initialize(context: android.content.Context, prefs: android.content.SharedPreferences) {
         // Capture this before migrations populate an otherwise fresh preference file.
         val hadSavedValues = prefs.all.isNotEmpty()
-        val removed=listOf("refraction_before_blur","folder_refraction_before_blur","photo_widget_refraction_before_blur")
+        val removed=listOf("refraction_before_blur","folder_refraction_before_blur","photo_widget_refraction_before_blur","artwork_icons")
         if(removed.any(prefs::contains))prefs.edit().apply {removed.forEach {remove(it)}}.apply()
         if(prefs.contains("blur_dither") || prefs.contains("blur_dither_strength"))prefs.edit().apply {
             if(!prefs.contains(SettingsProvider.KEY_COLOR_DEPTH_ENABLED))putBoolean(SettingsProvider.KEY_COLOR_DEPTH_ENABLED,prefs.getBoolean("blur_dither",false))
@@ -100,9 +100,9 @@ object SettingsDefaults {
         SettingsProvider.KEY_HAZE_ENABLED to false,
         SettingsProvider.KEY_DISABLE_EDGE_OPTIMIZATION to true,
         SettingsProvider.KEY_OPTIMIZE_MINI_ICONS to true,
-        // Experimental and untested on devices: explicit developer opt-in only.
-        SettingsProvider.KEY_LIFTED_BACKDROP to false,
         SettingsProvider.KEY_MD3_UI to false,
+        SettingsProvider.KEY_DOCK_ENABLED to false,
+        SettingsProvider.KEY_DOCK_AUTO_LENGTH to true,
         SettingsProvider.KEY_PHOTO_WIDGET_BLUR to false,
         SettingsProvider.KEY_PHOTO_WIDGET_TINT to false,
         SettingsProvider.KEY_FOLDER_ICONS_BLUR_ENABLED to true,
@@ -124,6 +124,12 @@ object SettingsDefaults {
         SettingsProvider.KEY_COLOR_DEPTH_BITS to 8,
         SettingsProvider.KEY_COLOR_DEPTH_STAGE to 3,
         SettingsProvider.KEY_BLUR_STYLE to SettingsProvider.BLUR_STYLE_FROSTED,
+        SettingsProvider.KEY_ARTWORK_TRANSPARENCY to 40,
+        // Proportions of the reference dock: about a quarter of the icon size
+        // around the icons, corners that follow the icon corners.
+        SettingsProvider.KEY_DOCK_SIDE_PADDING to 23,
+        SettingsProvider.KEY_DOCK_VERTICAL_PADDING to 23,
+        SettingsProvider.KEY_DOCK_RADIUS to 52,
         SettingsProvider.KEY_BLUR_QUALITY to 0,
         SettingsProvider.KEY_LIQUID_WIDTH to 40,
         SettingsProvider.KEY_LIQUID_DISTORTION to 50,
@@ -157,10 +163,10 @@ object SettingsDefaults {
         SettingsProvider.KEY_GRADIENT_OPACITY to 50
     )
     /** Only portable module preferences. Device reports, language and migration keys stay local. */
-    fun portable(): Map<String, Any> = (booleans - SettingsProvider.KEY_BOOT_RESTART - SettingsProvider.KEY_BOOT_RESTART_TOAST - SettingsProvider.KEY_MD3_UI) + integers + mapOf(FolderSettingsKeys.OWN to false) +
-        FolderSettingsKeys.booleans.associate { FolderSettingsKeys.key(it) to boolean(it) } +
-        FolderSettingsKeys.integers.associate { FolderSettingsKeys.key(it) to integer(it) }
-    fun boolean(key: String): Boolean = if(key==FolderSettingsKeys.OWN)false else booleans[key] ?: if(key.startsWith("folder_"))boolean(key.removePrefix("folder_"))else booleans.getValue(key)
-    fun integer(key: String): Int = integers[key] ?: if(key.startsWith("folder_"))integer(key.removePrefix("folder_"))else integers.getValue(key)
-    fun value(key: String): Any = if(key==FolderSettingsKeys.OWN)false else booleans[key] ?: integers[key] ?: if(key.startsWith("folder_"))value(key.removePrefix("folder_"))else integers.getValue(key)
+    fun portable(): Map<String, Any> = (booleans - SettingsProvider.KEY_BOOT_RESTART - SettingsProvider.KEY_BOOT_RESTART_TOAST - SettingsProvider.KEY_MD3_UI) + integers +
+        ScopedSettingsKeys.all.flatMap { scope -> listOf(scope.own to false) +
+            scope.booleans.map { scope.key(it) to boolean(it) } + scope.integers.map { scope.key(it) to integer(it) } }
+    fun boolean(key: String): Boolean = if(ScopedSettingsKeys.isOwnKey(key))false else booleans[key] ?: ScopedSettingsKeys.baseOf(key)?.let(::boolean) ?: booleans.getValue(key)
+    fun integer(key: String): Int = integers[key] ?: ScopedSettingsKeys.baseOf(key)?.let(::integer) ?: integers.getValue(key)
+    fun value(key: String): Any = if(ScopedSettingsKeys.isOwnKey(key))false else booleans[key] ?: integers[key] ?: ScopedSettingsKeys.baseOf(key)?.let(::value) ?: integers.getValue(key)
 }

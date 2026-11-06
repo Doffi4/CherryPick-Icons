@@ -275,7 +275,7 @@ object IconGlassHook {
     fun onIconThemeChanged(){
         FolderMaterialHook.invalidateGeometry()
         SurfaceMaterial.invalidateGeometry()
-        anchors.clear();viewAnchors.clear();hosts.clear();rawFrames.clear();layerCache.clear();previews.clear();previewNext.clear();IconBitmapProcessor.clearCache();DynamicIconForeground.clear()
+        anchors.clear();viewAnchors.clear();hosts.clear();rawFrames.clear();layerCache.clear();previews.clear();previewNext.clear();IconBitmapProcessor.clearCache();DynamicIconForeground.clear();SurfaceTone.clear()
         invalidateShaders()
     }
     fun reloadNativeIcons(){
@@ -370,6 +370,7 @@ object IconGlassHook {
         layerCache[drawable]?.takeIf {it.revision==stamp && it.source===source && it.generation==(source?.generationId ?: 0) && it.palette==palette && it.width==drawable.bounds.width() && it.height==drawable.bounds.height() && it.compatibility==compatibility && it.specialPackage==specialPackage}?.let {return it.layers}
         val result=layers(drawable)
         if(result!=null && SpecialIconSupport.packageOf(drawable)==null)SpecialIconSupport.rememberMask(result.plateMaskBitmap)
+        SurfaceTone.record(drawable,result)
         if(result!=null || !gpuDynamic)layerCache[drawable]=LayerCache(stamp,source,source?.generationId ?: 0,palette,result,drawable.bounds.width(),drawable.bounds.height(),compatibility,specialPackage)
         return result
     }
@@ -411,7 +412,7 @@ object IconGlassHook {
                 val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply {colorFilter=PorterDuffColorFilter((plateOpacity*255/100 shl 24) or (plateColor and 0xffffff),PorterDuff.Mode.SRC_IN)}
                 target.drawBitmap(WallpaperHelper.forCanvas(plateMask,target),null,local,paint)
                 if(PrefsHelper.gradientOpacity>0){
-                    paint.colorFilter=null;paint.shader=GlassVolume.shader(local.height().toFloat(),PrefsHelper.gradientOpacity)
+                    paint.colorFilter=null;paint.isDither=true;paint.shader=GlassVolume.shader(local.height().toFloat(),PrefsHelper.gradientOpacity)
                     paint.xfermode=PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
                     target.drawRect(local,paint)
                 }
@@ -585,7 +586,7 @@ object IconGlassHook {
      * and binds to [owner], the view that draws the preview, so samples and
      * lifted backdrops follow the dragged position.
      */
-    internal fun drawDragIcon(icon:Drawable,canvas:Canvas,bounds:Rect,owner:View,alpha:Int,mini:Boolean):Boolean {
+    internal fun drawDragIcon(icon:Drawable,canvas:Canvas,bounds:Rect,owner:View,alpha:Int,mini:Boolean,lift:Boolean=!mini):Boolean {
         if(bounds.isEmpty)return false
         if(canvas.quickReject(bounds.left.toFloat(),bounds.top.toFloat(),bounds.right.toFloat(),bounds.bottom.toFloat()))return true
         if(SpecialIconSupport.isContainer(icon))return false
@@ -599,9 +600,10 @@ object IconGlassHook {
         val binding=if(canvas.isHardwareAccelerated){
             val local=Matrix().also {canvas.getMatrix(it)}
             val rect=RectF(bounds);local.mapRect(rect)
-            // Folder preview items keep their resting wallpaper sample, at the
-            // full rate: the dragged preview moves every frame.
-            IconMaterialRenderer.Binding(owner,icon,rect,a.screenW,a.screenH,false,alpha,lift=!mini)
+            // Folder preview items and items of a dragged cluster keep their
+            // resting wallpaper sample, at the full rate: the dragged preview
+            // moves every frame.
+            IconMaterialRenderer.Binding(owner,icon,rect,a.screenW,a.screenH,false,alpha,lift=lift)
         }else null
         val layer=if(alpha<255)canvas.saveLayerAlpha(RectF(bounds),alpha)else canvas.save()
         try {render(canvas,bounds,parts,a,wallpaper(a),binding)}finally{canvas.restoreToCount(layer)}
@@ -625,14 +627,20 @@ object IconGlassHook {
     }
     fun init(lpparam:LoadPackageParam) {
         val loader=lpparam.classLoader
-        NativeSurfaceLive.install(loader)
-        DragPreviewMaterial.install(loader)
-        FolderMaterialHook.install(loader)
-        LiftedBackdrop.install(loader)
-        MultiIconMaterialHook.install(loader)
-        TransitionCapture.install(loader)
-        ForeignDraw.install(loader)
-        PhotoWidgetMaterial.install(loader)
+        for((name,install) in listOf<Pair<String,()->Unit>>(
+            "NativeSurface" to {NativeSurfaceLive.install(loader)},
+            "DragPreview" to {DragPreviewMaterial.install(loader)},
+            "Folders" to {FolderMaterialHook.install(loader)},
+            "LiftedBackdrop" to {LiftedBackdrop.install(loader)},
+            "MultiIcons" to {MultiIconMaterialHook.install(loader)},
+            "Dock" to {DockMaterial.install(loader)},
+            "Transition" to {TransitionCapture.install(loader)},
+            "ForeignDraw" to {ForeignDraw.install(loader)},
+            "PhotoWidget" to {PhotoWidgetMaterial.install(loader)}
+        ))try {
+            install()
+            GlassLogger.i("Compat","$name setup completed")
+        }catch(t:Throwable){GlassLogger.e("Compat","$name setup failed; remaining features continue",t)}
         // Carry the source view through native asynchronous icon preparation.
         // The anchor belongs to this load request, never to a global last click.
         val modernLoader=XposedHelpers.findClassIfExists("com.android.launcher3.anim.iconsurfacemanager.loader.IconDrawableLoader",loader)
@@ -815,6 +823,18 @@ object IconGlassHook {
     internal fun bindSpecialView(view:View){
         if(PrefsHelper.enabled && recording.get()!=true)SpecialIconSupport.bind(view,{recording.get()==true}) {icon,canvas ->
             drawMaterial(icon,canvas,icon.bounds)
+        }
+    }
+    internal fun bindContextView(view:View){
+        bindSpecialView(view)
+        // App icons retain their normal extraction; shortcut buttons and empty slots use OEM circular plates.
+        val type=view.tag?.let {NativeIconAccess.field(it,"itemType") as? Number}?.toInt()
+        if(view.tag!=null && type!=1 && type!=6)return
+        val icon=NativeIconAccess.call(view,"getIcon") as? Drawable ?: return
+        hosts[icon]=WeakReference(view)
+        registerLiveView(view)
+        SpecialIconSupport.bindContext(icon,{recording.get()==true}) {drawable,canvas ->
+            drawMaterial(drawable,canvas,drawable.bounds)
         }
     }
 }

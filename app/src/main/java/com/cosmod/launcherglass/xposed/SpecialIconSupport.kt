@@ -14,12 +14,17 @@ internal object SpecialIconSupport {
     private val clocks=setOf("com.coloros.alarmclock","com.oplus.alarmclock","com.oneplus.deskclock","com.google.android.deskclock","com.android.deskclock","com.android.alarmclock")
     private val calendars=setOf("com.coloros.calendar","com.oplus.calendar","com.android.calendar","com.google.android.calendar")
     private val packages=WeakHashMap<Drawable,String>()
+    private val contextual=WeakHashMap<Drawable,Boolean>()
     private val methods=HashSet<Method>()
     private val failures=HashSet<String>()
     private val components=WeakHashMap<Any,String>()
     private val viewLogs=HashSet<String>()
     private var plate:Bitmap?=null
     fun packageOf(drawable:Drawable)=packages[drawable]
+    fun bindContext(drawable:Drawable,isRecording:()->Boolean,render:(Drawable,Canvas)->Boolean){
+        if(isContainer(drawable) || contextual.put(drawable,true)==true)return
+        hookDraw(drawable,isRecording,render)
+    }
     fun dynamic(drawable:Drawable)=packages[drawable] in clocks || packages[drawable] in calendars
     fun isContainer(drawable:Drawable)=drawable.javaClass.name.let {
         it=="com.android.launcher3.folder.FolderPreviewDrawable" || it=="com.android.launcher3.folder.big.stacked.StackedDrawable"
@@ -63,20 +68,23 @@ internal object SpecialIconSupport {
         if(pkg !in clocks && pkg !in calendars && pkg!="com.geteit.andwobble")return false
         if(packages[drawable]==pkg)return true
         packages[drawable]=pkg
+        hookDraw(drawable,isRecording,render)
+        return true
+    }
+    private fun hookDraw(drawable:Drawable,isRecording:()->Boolean,render:(Drawable,Canvas)->Boolean){
         val method=drawable.javaClass.getMethod("draw",Canvas::class.java)
-        if(!methods.add(method))return true
-        GlassLogger.i("SpecialIcons","Native override: $pkg -> ${drawable.javaClass.name}, draw=${method.declaringClass.name}")
+        if(!methods.add(method))return
+        GlassLogger.i("SpecialIcons","Native override: ${packages[drawable] ?: "contextual"} -> ${drawable.javaClass.name}, draw=${method.declaringClass.name}")
         ModuleHooks.hookMethod(method,object:XC_MethodHook(PRIORITY_HIGHEST){
             override fun beforeHookedMethod(param:MethodHookParam){
                 if(!PrefsHelper.enabled || isRecording())return
                 val icon=param.thisObject as? Drawable ?: return
-                if(!packages.containsKey(icon))return
+                if(!packages.containsKey(icon) && !contextual.containsKey(icon))return
                 val canvas=param.args.firstOrNull() as? Canvas ?: return
                 try {if(render(icon,canvas))param.result=null}
                 catch(t:Throwable){if(failures.add(icon.javaClass.name+":"+t.message))GlassLogger.e("SpecialIcons","Native material failed",t)}
             }
         })
-        return true
     }
     fun legacyLayers(bitmap:Bitmap):ProcessedIcon {
         val size=bitmap.width

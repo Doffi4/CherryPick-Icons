@@ -53,6 +53,7 @@
     <string name="ui_energy_saving_description">Пауза, когда обои и экран неподвижны</string>
     <string name="ui_logs">Диагностика · логи</string>
     <string name="ui_support_project">Поддержать проект</string>
+    <string name="ui_support_project_button">Поддержать\nпроект</string>
     <string name="ui_author_profile">by @immorgue — профиль в Telegram</string>
     <string name="ui_telegram_error">Не удалось открыть Telegram</string>
     <string name="ui_restart_launcher">Перезапустить лаунчер</string>
@@ -79,6 +80,13 @@
     <string name="ui_share_logs">Поделиться диагностикой</string>
     <string name="ui_blur_vibrancy">Vibrancy обоев</string>
     <string name="ui_blur_vibrancy_hint">Усиливает цвета обоев под блюром, сохраняя тёмные участки тёмными. Уменьшает подавление цветов тонировкой.</string>
+    <string name="ui_dock">Док</string>
+    <string name="ui_dock_auto_length">Автоматическая длина</string>
+    <string name="ui_dock_size">Размер</string>
+    <string name="ui_dock_side_padding">Отступ по бокам</string>
+    <string name="ui_dock_vertical_padding">Отступ сверху и снизу</string>
+    <string name="ui_dock_radius">Радиус скругления</string>
+    <string name="ui_dock_radius_hint">По умолчанию — 52, скругление иконок — 40.</string>
     <string name="ui_widgets">Виджеты</string>
     <string name="ui_photo_widget_blur">Блюр фото-виджетов</string>
     <string name="ui_photo_widget_opacity">Непрозрачность фотографии</string>
@@ -91,9 +99,10 @@
     <string name="ui_color_depth">Ограничение глубины цвета блюра</string>
     <string name="ui_optimize_mini_icons">Мини-иконки в папках: 30 FPS</string>
     <string name="ui_optimize_mini_icons_hint">Ограничивает обновление маленьких иконок в папках 1×1 и мелких миниатюр в больших папках до 30 FPS. Блюр и рефракция сохраняются. Крупные иконки соблюдают общий лимит блюра; если он ниже 30 FPS, миниатюры тоже соблюдают его.</string>
+    <string name="ui_artwork_icons">Иконки без подложки (эксперимент)</string>
+    <string name="ui_artwork_transparency">Прозрачность окраски</string>
+    <string name="ui_artwork_icons_hint">Для иконок-картинок без однотонной подложки (игры, фото, градиенты): рисунок перекрашивается в тона палитры, а сквозь него видно стекло. Работает в режиме разработчика.</string>
     <string name="ui_color_depth_bits">Глубина цвета</string>
-    <string name="ui_lifted_backdrop">Живой фон под перетаскиваемым элементом (эксперимент)</string>
-    <string name="ui_lifted_backdrop_hint">По умолчанию выключено и не проверено на устройствах. Пока иконка или папка перетаскивается, её стекло размывает слои лаунчера под ней, а не только обои (фотовиджеты по-прежнему размывают обои). Если лаунчер упадёт во время перетаскивания, эффект отключится до перезагрузки или обновления модуля. Выключите его, если перетаскивание стало нестабильным, и затем перезапустите лаунчер, чтобы полностью снять его перехватчики.</string>
     <string name="ui_md3_interface">Интерфейс Material 3 (эксперимент)</string>
     <string name="ui_md3_interface_hint">Стандартная компоновка Material 3 для приложения настроек: верхняя панель, строки списка с переключателями и пояснениями, сброс с подтверждением. Меняет только этот экран; классический интерфейс остаётся по умолчанию. Действует, пока включён режим разработчика; если приложение с ним упадёт, он выключится сам.</string>
     <string name="ui_reset_defaults">Сбросить к значениям по умолчанию</string>

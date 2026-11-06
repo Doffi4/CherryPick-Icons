@@ -11,8 +11,8 @@ android {
         applicationId = "com.cosmod.launcherglass"
         minSdk = 31
         targetSdk = 35
-        versionCode = 242
-        versionName = "0.2.42"
+        versionCode = 247
+        versionName = "0.2.47-dev"
     }
 
     signingConfigs {
@@ -59,6 +59,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     compileOnly("de.robv.android.xposed:api:82")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
