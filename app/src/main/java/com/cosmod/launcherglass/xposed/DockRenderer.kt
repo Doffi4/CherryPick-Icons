@@ -9,10 +9,12 @@ import de.robv.android.xposed.XposedHelpers
 
 /** Dock-specific, direct-resolution path rendering; no nested sampler RenderNode. */
 internal class DockRenderer {
+    private val plate=RenderNode("CherryPick.dockPlate").apply {setUseCompositingLayer(true,null)}
+    private var key:List<Any?>?=null
     private var lens:LiquidGlassShader?=null
     private var lastWallpaper:Bitmap?=null
     private val solid:Shader=LinearGradient(0f,0f,1f,0f,Color.WHITE,Color.WHITE,Shader.TileMode.CLAMP)
-    fun reset(){lastWallpaper=null}
+    fun reset(){lastWallpaper=null;key=null;plate.discardDisplayList()}
     fun draw(canvas:Canvas, view:View, rect:Rect, path:Path?, radius:Float, alpha:Float):Boolean {
         val style=DockSettings.style().copy(extendedLens=true)
         val w=rect.width();val h=rect.height()
@@ -27,6 +29,28 @@ internal class DockRenderer {
             WallpaperFootprint.source(it,dm.widthPixels,dm.heightPixels,screen)
         }
         val shape=path ?: Path().apply {addRoundRect(RectF(rect),radius,radius,Path.Direction.CW)}
+        if(canvas.isHardwareAccelerated){
+            val next=listOf(wallpaper,wallpaper?.generationId,Rect(rect),source,style,radius,
+                PrefsHelper.gpuEffects,PrefsHelper.gradientOpacity,PrefsHelper.iconStroke,PrefsHelper.strokeOpacity,
+                SurfaceMaterial.geometryRevision)
+            if(key!=next || !plate.hasDisplayList()){
+                plate.setPosition(0,0,w,h)
+                val recording=plate.beginRecording(w,h)
+                try {
+                    recording.translate(-rect.left.toFloat(),-rect.top.toFloat())
+                    drawPlate(recording,rect,shape,radius,1f,wallpaper,source,style)
+                }finally{plate.endRecording()}
+                key=next
+            }
+            plate.alpha=alpha.coerceIn(0f,1f)
+            val saved=canvas.save()
+            try {canvas.translate(rect.left.toFloat(),rect.top.toFloat());canvas.drawRenderNode(plate)}
+            finally{canvas.restoreToCount(saved)}
+        }else drawPlate(canvas,rect,shape,radius,alpha,wallpaper,source,style)
+        return true
+    }
+    private fun drawPlate(canvas:Canvas,rect:Rect,shape:Path,radius:Float,alpha:Float,wallpaper:Bitmap?,source:RectF?,style:GlassStyle){
+        val w=rect.width();val h=rect.height()
         val saved=if(alpha<.999f)canvas.saveLayerAlpha(RectF(rect),(alpha.coerceIn(0f,1f)*255).toInt()) else canvas.save()
         try {
             canvas.clipPath(shape)
@@ -63,6 +87,5 @@ internal class DockRenderer {
             }
             val save=canvas.save();canvas.clipPath(shape);canvas.drawPath(shape,edge);canvas.restoreToCount(save)
         }
-        return true
     }
 }

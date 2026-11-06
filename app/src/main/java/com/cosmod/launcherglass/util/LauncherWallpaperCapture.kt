@@ -127,6 +127,7 @@ object LauncherWallpaperCapture {
     private var surfaceRetries = 0
     private var awaitingUnlock=false
     private var staticMotionUntilMs=0L
+    private var staticWallpaper=false
 
     fun onScreenOff() {
         GlassLogger.i("WallpaperCapture","Screen off -> pause capture")
@@ -154,7 +155,7 @@ object LauncherWallpaperCapture {
         override fun run() {
             if (motionFactory == null) return
             val now = SystemClock.uptimeMillis()
-            if ((PrefsHelper.idlePause && motionState.isSettled(now)) ||
+            if (motionState.shouldStop(now,PrefsHelper.idlePause,staticWallpaper,staticMotionUntilMs) ||
                 (now - watchStartedMs > 2500L && lastFrameMs < watchStartedMs)) {
                 stopMotionWatch()
             } else main.postDelayed(this, 100L)
@@ -223,7 +224,8 @@ object LauncherWallpaperCapture {
         val now = SystemClock.uptimeMillis()
         // Static ImageWallpaper also moves during ColorOS unlock. Capture that
         // short transition, without running a permanent static-wallpaper watch.
-        if(now>=staticMotionUntilMs && try { WallpaperManager.getInstance(context).wallpaperInfo == null } catch (_: Throwable) { true }) return
+        staticWallpaper=try { WallpaperManager.getInstance(context).wallpaperInfo == null } catch (_: Throwable) { true }
+        if(now>=staticMotionUntilMs && staticWallpaper)return
         val api=api(context) ?: return
         if (motionFactory != null) {
             motionState.wake(now)
@@ -245,7 +247,6 @@ object LauncherWallpaperCapture {
             watchStartedMs = now
             lastFrameMs = 0L
             motionState = WallpaperMotionState().apply { wake(now) }
-            WallpaperHelper.resetLiveFrameSignature()
             val listener = Proxy.newProxyInstance(callback.classLoader, arrayOf(callback)) { proxy, method, args ->
                 when (method.name) {
                     "hashCode" -> System.identityHashCode(proxy)

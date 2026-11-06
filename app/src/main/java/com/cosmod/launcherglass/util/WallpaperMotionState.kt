@@ -15,4 +15,7 @@ internal class WallpaperMotionState {
     }
 
     fun isSettled(now: Long): Boolean = signature != null && now >= watchUntil && now - lastChange >= 600L
+
+    fun shouldStop(now:Long,idlePause:Boolean,staticWallpaper:Boolean,staticUntil:Long):Boolean =
+        (staticWallpaper && now>=staticUntil) || (idlePause && isSettled(now))
 }

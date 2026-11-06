@@ -155,7 +155,6 @@ object WallpaperHelper {
 
 
 
-    fun resetLiveFrameSignature() { liveFrameSignature = null }
 
 
 

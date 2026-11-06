@@ -79,7 +79,7 @@ internal object MultiIconMaterialHook {
     }
     private fun bindItems(view:View,depth:Int=0){
         if(depth>5)return
-        IconGlassHook.bindSpecialView(view)
+        IconGlassHook.bindContextView(view)
         if(view is ViewGroup)for(i in 0 until view.childCount)bindItems(view.getChildAt(i),depth+1)
     }
     fun install(loader:ClassLoader){

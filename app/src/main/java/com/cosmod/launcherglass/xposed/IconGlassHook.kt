@@ -820,4 +820,16 @@ object IconGlassHook {
             drawMaterial(icon,canvas,icon.bounds)
         }
     }
+    internal fun bindContextView(view:View){
+        bindSpecialView(view)
+        // App icons retain their normal extraction; shortcut buttons and empty slots use OEM circular plates.
+        val type=view.tag?.let {NativeIconAccess.field(it,"itemType") as? Number}?.toInt()
+        if(view.tag!=null && type!=1 && type!=6)return
+        val icon=NativeIconAccess.call(view,"getIcon") as? Drawable ?: return
+        hosts[icon]=WeakReference(view)
+        registerLiveView(view)
+        SpecialIconSupport.bindContext(icon,{recording.get()==true}) {drawable,canvas ->
+            drawMaterial(drawable,canvas,drawable.bounds)
+        }
+    }
 }
