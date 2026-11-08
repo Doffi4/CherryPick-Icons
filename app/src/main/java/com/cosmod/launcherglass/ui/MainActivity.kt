@@ -546,7 +546,46 @@ class MainActivity : AppCompatActivity() {
             refreshers.add {liquid.visibility=if(number(SettingsProvider.KEY_BLUR_STYLE)==1)View.VISIBLE else View.GONE}
             add(details,liquid)
         }
+        desktopDesignerSection(body)
         settingsTransferSection(body)
+    }
+
+    private fun desktopDesignerSection(body:LinearLayout) {
+        val content=column().apply {setPadding(dp(20),dp(20),dp(20),dp(12))}
+        add(content,text(getString(R.string.ui_desktop_title),19f,bold=true))
+        add(content,text(getString(R.string.ui_desktop_hint),14f,true),top=8,bottom=12)
+        val sizing=column().apply {visibility=View.GONE}
+        for((label,key,hint) in listOf(
+            Triple(R.string.ui_desktop_icon_size,com.cosmod.launcherglass.util.DesktopSizing.ICON_SCALE,R.string.ui_desktop_icon_size_hint),
+            Triple(R.string.ui_desktop_indicator_gaps,com.cosmod.launcherglass.util.DesktopSizing.INDICATOR_GAPS,R.string.ui_desktop_indicator_gaps_hint),
+            Triple(R.string.ui_desktop_widget_gaps,com.cosmod.launcherglass.util.DesktopSizing.WIDGET_GAPS,R.string.ui_desktop_widget_gaps_hint),
+            Triple(R.string.ui_desktop_bottom_bias,com.cosmod.launcherglass.util.DesktopSizing.BOTTOM_BIAS,R.string.ui_desktop_bottom_bias_hint))) {
+            val range=com.cosmod.launcherglass.util.DesktopSizing.ranges.getValue(key)
+            add(sizing,slider(getString(label),key,range.first,range.last,"%",getString(hint)))
+        }
+        add(sizing,text(getString(R.string.ui_desktop_sizing_restart),13f,true),top=8,bottom=12)
+        add(sizing,com.google.android.material.button.MaterialButton(this,null,M.attr.materialButtonOutlinedStyle).apply {
+            text=getString(R.string.ui_reset_defaults);isAllCaps=false;minHeight=dp(48)
+            setOnClickListener {haptic(it);resetToDefaults(com.cosmod.launcherglass.util.DesktopSizing.defaults.keys.toList())}
+        },bottom=12)
+        var sizingOpen=false
+        add(content,com.google.android.material.button.MaterialButton(this,null,M.attr.materialButtonOutlinedStyle).apply {
+            text=getString(R.string.ui_desktop_sizing);isAllCaps=false;minHeight=dp(48)
+            setOnClickListener {haptic(it);sizingOpen=!sizingOpen;reveal(sizing,sizingOpen)}
+        },bottom=8)
+        add(content,sizing)
+        add(content,com.google.android.material.button.MaterialButton(this,null,M.attr.materialButtonOutlinedStyle).apply {
+            text=getString(R.string.ui_desktop_open);isAllCaps=false;minHeight=dp(48)
+            setOnClickListener {
+                haptic(it)
+                try {
+                    check(isModuleActive())
+                    check(contentResolver.call(SettingsProvider.CONTENT_URI,SettingsProvider.METHOD_OPEN_DESKTOP,null,null)?.getBoolean("pending")==true)
+                    startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }catch(_:Exception){Toast.makeText(this@MainActivity,R.string.ui_desktop_unavailable,Toast.LENGTH_LONG).show()}
+            }
+        },bottom=8)
+        add(body,card(content),top=24)
     }
 
     private fun settingsTransferSection(body: LinearLayout) {

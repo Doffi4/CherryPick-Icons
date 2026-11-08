@@ -16,7 +16,9 @@
 
 ### Возможности
 
-\- Матовые подложки Frosted и преломление Liquid Glass с сохранением системной формы Flux.<br>
+\- Матовые подложки Frosted и резкое преломление Liquid Glass без размытия, с мягким свечением и дымкой.<br>
+\- Конструктор рабочего стола: сетка 4–6 столбцов и 5–8 строк, предпросмотр страниц и размеров элементов, штатное перетаскивание иконок и виджетов. Проверка размещения и запрет удаления элементов при переносе. Нестандартные сетки экспериментальны; смена сетки может переставить элементы.<br>
+\- Общие размеры иконок и папок, отступы индикатора, внешние поля совместимых виджетов и выравнивание рабочего стола ближе к доку. Применяются после перезапуска лаунчера без переноса элементов по ячейкам.<br>
 \- Живое и статичное размытие обоев, общий лимит обновлений материала до 60 FPS.<br>
 \- Отдельные настройки подложек папок, миниатюр и фото-виджетов.<br>
 \- Настройки цвета, прозрачности, контура и объёма, русский и английский интерфейс.
@@ -94,7 +96,9 @@ and creating the interface.
 
 ### Features
 
-\- Frosted backgrounds and Liquid Glass refraction that preserve the native Flux icon shape.<br>
+\- Frosted backgrounds and sharp Liquid Glass refraction without blur, with soft bloom and haze.<br>
+\- Desktop designer: 4–6 columns and 5–8 rows, page and item-footprint previews, and native icon/widget dragging. Placement validation and item deletion protection during migration. Custom grids are experimental; changing the grid can rearrange items.<br>
+\- Shared icon/folder size, page-indicator spacing, supported widget exterior padding and workspace alignment towards the dock. Applied after restarting the launcher without changing item cell positions.<br>
 \- Live and static wallpaper blur, with a shared material update limit of up to 60 FPS.<br>
 \- Separate settings for folder plates, miniature icons, and photo widgets.<br>
 \- Color, opacity, contour, and depth controls; Russian and English interfaces.

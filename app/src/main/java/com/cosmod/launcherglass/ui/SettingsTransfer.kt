@@ -66,6 +66,7 @@ internal object SettingsTransfer {
 
     private fun range(key: String): LongRange {
         val base = ScopedSettingsKeys.baseOf(key) ?: key
+        com.cosmod.launcherglass.util.DesktopSizing.ranges[base]?.let {return it.first.toLong()..it.last.toLong()}
         return when (base) {
             SettingsProvider.KEY_COLOR_HUE, SettingsProvider.KEY_LIGHT_HUE, SettingsProvider.KEY_DARK_HUE -> 0L..360L
             SettingsProvider.KEY_BLUR_SATURATION, SettingsProvider.KEY_BLUR_VIBRANCY -> 0L..200L

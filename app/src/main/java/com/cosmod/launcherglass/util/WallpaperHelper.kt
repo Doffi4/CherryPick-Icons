@@ -84,7 +84,7 @@ object WallpaperHelper {
         val options=own.settings.processing
         val h=minOf(600+options.quality*12,raw.height)
         val w=(raw.width.toFloat()*h/raw.height).roundToInt().coerceAtLeast(1)
-        val radius=options.radius*(h/800f)*(if(options.liquid).28f else 1f)
+        val radius=LiquidOptics.blurRadius(options.radius,h,options.liquid)
         val gpuImage=if(PrefsHelper.gpuEffects)try {
             val input=if(android.os.Build.VERSION.SDK_INT<33)BackdropVibrancy.applyCpu(raw,options.vibrancy)else raw
             val gpu=try {
@@ -571,7 +571,7 @@ object WallpaperHelper {
 
             val targetW = ((rawBitmap.width.toFloat() / rawBitmap.height.toFloat()) * targetH).roundToInt().coerceAtLeast(1)
 
-            val effectRadius = radius * (targetH / 800f) * (if(PrefsHelper.liquidGlass).28f else 1f)
+            val effectRadius = LiquidOptics.blurRadius(radius,targetH,PrefsHelper.liquidGlass)
 
             if(PrefsHelper.gpuEffects)try {
 

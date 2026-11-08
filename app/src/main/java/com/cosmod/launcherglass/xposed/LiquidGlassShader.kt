@@ -145,8 +145,23 @@ internal class LiquidGlassShader private constructor(private val shader:RuntimeS
                 float3 ray=refract(float3(0.0,0.0,-1.0),normal,1.0/1.45);
                 return ray.xy/max(-ray.z,.25)*(edgeSize*.22)*distortion;
             }
-            half4 shade(half4 sampled,float2 xy) {
+            float3 highlights(float2 q) {
+                half4 c=backdrop.eval(q);
+                float3 rgb=float3(c.rgb)/max(float(c.a),.00001);
+                float bright=clamp((dot(rgb,float3(.2126,.7152,.0722))-.55)/.45,0.0,1.0);
+                return rgb*bright*float(c.a);
+            }
+            float3 bloom(float2 q,float2 stepSize) {
+                return (highlights(q+float2(stepSize.x,0.0))+highlights(q-float2(stepSize.x,0.0))+
+                    highlights(q+float2(0.0,stepSize.y))+highlights(q-float2(0.0,stepSize.y))+
+                    highlights(q+stepSize)+highlights(q-stepSize)+
+                    highlights(q+float2(stepSize.x,-stepSize.y))+highlights(q+float2(-stepSize.x,stepSize.y)))*.125;
+            }
+            half4 shade(half4 sampled,float2 xy,float3 glow) {
                 float3 color=clamp(float3(dot(float4(sampled),rowR),dot(float4(sampled),rowG),dot(float4(sampled),rowB))+bias,0.0,1.0);
+                float2 delta=(xy/size-float2(.18,.08))*float2(1.0,.85);
+                float veil=.025+.045*exp(-dot(delta,delta)*2.4);
+                color=clamp(color+(1.0-color)*veil+glow*.18,0.0,1.0);
                 // The shared contour texture supplies identical edge lighting
                 // in Frosted and Liquid Glass, honoring the contour toggle.
                 half alpha=mask.eval(xy).a;
@@ -158,7 +173,8 @@ internal class LiquidGlassShader private constructor(private val shader:RuntimeS
         """+LENS+"""
             half4 main(float2 xy) {
                 float2 uv=(xy+lensOffset(xy))/size;
-                return shade(backdrop.eval(crop.xy+uv*crop.zw),xy);
+                float2 q=crop.xy+uv*crop.zw;
+                return shade(backdrop.eval(q),xy,bloom(q,crop.zw*.035));
             }
         """
         // Lifted variant: "backdrop" is the RenderEffect input of a node that
@@ -172,7 +188,7 @@ internal class LiquidGlassShader private constructor(private val shader:RuntimeS
                 float2 p=xy-origin;
                 if(p.x<0.0 || p.y<0.0 || p.x>size.x || p.y>size.y)return half4(0.0);
                 float2 q=clamp(origin+p+lensOffset(p),float2(.5),limit-float2(.5));
-                return shade(backdrop.eval(q),p);
+                return shade(backdrop.eval(q),p,bloom(q,size*.035));
             }
         """
     }

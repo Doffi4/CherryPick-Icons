@@ -152,6 +152,8 @@ object PrefsHelper {
                 null
             ) ?: return
 
+            DesktopGeometry.load(bundle)
+
             val newEnabled = bundle.getBoolean(SettingsProvider.KEY_ENABLED, SettingsDefaults.boolean(SettingsProvider.KEY_ENABLED))
             val toneEnabled=bundle.getBoolean(SettingsProvider.KEY_BLUR_TONE_ENABLED,true)
             val newBgOpacity = if (toneEnabled)

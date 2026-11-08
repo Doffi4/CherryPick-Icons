@@ -7,7 +7,8 @@ import java.io.File
 /** Reads only this module's activation/scope, never changes LSPosed settings. */
 object LsposedScopeStatus {
     data class State(val enabled: Boolean, val launcherSelected: Boolean)
-    fun read(context: Context): State? {
+    // Overlapping Activity lifetimes must not truncate another reader's mmap-backed snapshot.
+    @Synchronized fun read(context: Context): State? {
         val folder=File(context.cacheDir,"lsposed-status").apply { mkdirs() }
         val copy=File(folder,"scope.db")
         val source="/data/adb/lspd/config/modules_config.db"

@@ -43,6 +43,10 @@ class HookEntry : IXposedHookLoadPackage {
 
         if (packageName in launcherPackages) {
             GlassLogger.i("HookEntry", ">>> Hooking ColorOS Launcher: $packageName <<<")
+            try {DesktopDesignerHook.install(lpparam.classLoader)}
+            catch(t:Throwable){GlassLogger.e("DesktopDesigner","Cannot install desktop editor",t)}
+            try {DesktopGeometry.install(lpparam.classLoader)}
+            catch(t:Throwable){GlassLogger.e("DesktopGeometry","Cannot install native desktop sizing",t)}
 
             var initialized = false
             fun ensureInit(context: Context, source: String) {

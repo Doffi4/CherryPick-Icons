@@ -128,7 +128,7 @@ internal object DockMaterial {
             if(v!=null && enabled())try {
                 val matrix=Matrix();XposedHelpers.callMethod(v,"transformMatrixToGlobal",matrix)
                 val values=FloatArray(9);matrix.getValues(values)
-                val wall=if(DockSettings.style().radius>0)WallpaperHelper.getDockWallpaper(v.context) else null
+                val wall=if(!IconMaterialRenderer.clearGlass(DockSettings.style()))WallpaperHelper.getDockWallpaper(v.context) else null
                 val signature=listOf(*values.toTypedArray(),System.identityHashCode(wall),wall?.generationId,
                     LiveBlurEngine.wallpaperScrollRatio,rowAlpha(v),DockSettings.style(),geometry(v))
                 if(signature!=dock.signature){dock.signature=signature;v.invalidate()}

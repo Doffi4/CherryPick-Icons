@@ -19,8 +19,9 @@ internal class DockRenderer {
         val style=DockSettings.style().copy(extendedLens=true)
         val w=rect.width();val h=rect.height()
         if(w<=0 || h<=0)return false
-        val current=if(style.radius>0)WallpaperHelper.getDockWallpaper(view.context)?.takeUnless {it.isRecycled} else null
-        val wallpaper=if(style.radius<=0)null else (current ?: lastWallpaper?.takeUnless {it.isRecycled}) ?: return false
+        val clear=IconMaterialRenderer.clearGlass(style)
+        val current=if(!clear)WallpaperHelper.getDockWallpaper(view.context)?.takeUnless {it.isRecycled} else null
+        val wallpaper=if(clear)null else (current ?: lastWallpaper?.takeUnless {it.isRecycled}) ?: return false
         if(current!=null && !current.isRecycled)lastWallpaper=current
         val source=wallpaper?.let {
             val world=Matrix();XposedHelpers.callMethod(view,"transformMatrixToGlobal",world)

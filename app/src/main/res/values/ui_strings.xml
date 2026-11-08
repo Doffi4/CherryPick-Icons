@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="ui_desktop_sizing">Sizes and spacing</string>
+    <string name="ui_desktop_icon_size">Icons and folders</string>
+    <string name="ui_desktop_icon_size_hint">100% keeps the system size. Enlargement is limited by the cell width.</string>
+    <string name="ui_desktop_indicator_gaps">Page indicator spacing</string>
+    <string name="ui_desktop_indicator_gaps_hint">Lower values reduce empty spacing around the indicator while keeping its touch area.</string>
+    <string name="ui_desktop_widget_gaps">Widget exterior padding</string>
+    <string name="ui_desktop_widget_gaps_hint">Lower values give supported widgets more area inside their cells. Resize their cell span in the launcher editor.</string>
+    <string name="ui_desktop_bottom_bias">Move workspace towards dock</string>
+    <string name="ui_desktop_bottom_bias_hint">0% keeps system alignment. Higher values move the grid down using existing free space.</string>
+    <string name="ui_desktop_sizing_restart">Restart the launcher to apply size and spacing changes. Return the sliders to their initial values to restore system geometry.</string>
+    <string name="ui_desktop_title">Desktop designer</string>
+    <string name="ui_desktop_hint">Choose the grid, then arrange icons and widgets in the launcher’s editor. Custom grids are experimental.</string>
+    <string name="ui_desktop_open">Open desktop designer</string>
+    <string name="ui_desktop_columns">Columns</string>
+    <string name="ui_desktop_rows">Rows</string>
+    <string name="ui_desktop_arrange">Arrange items</string>
+    <string name="ui_desktop_apply">Apply grid</string>
+    <string name="ui_desktop_apply_warning">The launcher will rearrange icons and widgets. Some items may move to another page. Restoring the old grid dimensions will not restore their previous positions.</string>
+    <string name="ui_desktop_unavailable">Desktop designer is unavailable. Enable CherryPick in LSPosed and restart the launcher. This launcher version may be unsupported.</string>
+    <string name="ui_desktop_busy">The launcher is already applying a layout. Try again when it finishes.</string>
+    <string name="ui_desktop_checking">Checking…</string>
+    <string name="ui_desktop_preview_hint">Preview the grid and item sizes on each page. Move items in the launcher’s editor.</string>
+    <string name="ui_desktop_previous">Previous page</string>
+    <string name="ui_desktop_next">Next page</string>
+    <string name="ui_desktop_preview_summary">%1$d × %2$d · Pages: %3$d</string>
+    <string name="ui_desktop_applying">Applying grid…</string>
+    <string name="ui_desktop_applied">Grid applied. You can now arrange items.</string>
+    <string name="ui_desktop_failed">Could not apply the grid. The launcher will reload the saved layout.</string>
+    <string name="ui_desktop_no_space">This grid cannot fit all items. The layout was not changed. Choose a larger grid.</string>
     <string name="ui_background_blur">Background blur</string>
     <string name="ui_blur">Blur</string>
     <string name="ui_blur_radius">Blur radius</string>

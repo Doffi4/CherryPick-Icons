@@ -4,6 +4,7 @@ import android.graphics.*
 import android.util.LruCache
 import java.util.WeakHashMap
 import kotlin.math.*
+import com.cosmod.launcherglass.util.LiquidOptics
 
 /** Software counterpart of LiquidGlassShader: the same lens, native mask and linear sampling. */
 internal object CpuLiquidGlass {
@@ -79,11 +80,25 @@ internal object CpuLiquidGlass {
             val x=px.toInt();val y=py.toInt();val xx=min(x+1,ww-1);val yy=min(y+1,wh-1)
             val fx=px-x;val fy=py-y
             val c00=pixels[y*ww+x];val c10=pixels[y*ww+xx];val c01=pixels[yy*ww+x];val c11=pixels[yy*ww+xx]
+            var glowR=0f;var glowG=0f;var glowB=0f
+            val stepX=source.width()*.035f;val stepY=source.height()*.035f
+            for(oy in -1..1)for(ox in -1..1){
+                if(ox==0 && oy==0)continue
+                val bx=(px+ox*stepX).roundToInt().coerceIn(0,ww-1)
+                val by=(py+oy*stepY).roundToInt().coerceIn(0,wh-1)
+                val c=pixels[by*ww+bx]
+                val r=((c ushr 16) and 255)/255f;val g=((c ushr 8) and 255)/255f;val b=(c and 255)/255f
+                val bright=LiquidOptics.highlight(r,g,b)*(c ushr 24)/255f*.125f
+                glowR+=r*bright;glowG+=g*bright;glowB+=b*bright
+            }
+            val veil=LiquidOptics.veil((i%width+.5f)/width,(i/width+.5f)/height)
             var rgb=0
             for(shift in 16 downTo 0 step 8){
                 val top=((c00 ushr shift) and 255)*(1f-fx)+((c10 ushr shift) and 255)*fx
                 val bottom=((c01 ushr shift) and 255)*(1f-fx)+((c11 ushr shift) and 255)*fx
-                rgb=rgb or ((top*(1f-fy)+bottom*fy).roundToInt().coerceIn(0,255) shl shift)
+                val glow=when(shift){16->glowR;8->glowG;else->glowB}
+                val finished=LiquidOptics.channel((top*(1f-fy)+bottom*fy)/255f,glow,veil)
+                rgb=rgb or ((finished*255f).roundToInt().coerceIn(0,255) shl shift)
             }
             output[i]=(a shl 24) or rgb
         }

@@ -170,6 +170,9 @@ object IconGlassHook {
         }
         return hosts[drawable]?.get()?.takeIf {it.isAttachedToWindow}
     }
+    private fun displayedIconBounds(view:View):Rect? = try {
+        Rect().also {XposedHelpers.callMethod(view,"getIconBounds",it)}.takeUnless {it.isEmpty}
+    }catch(_:Throwable){null}
     private fun anchor(view:View,bounds:Rect):Anchor {
         val previous=viewAnchors[view]
         var transformNode:View?=view
@@ -185,9 +188,10 @@ object IconGlassHook {
         if(NativeSurfaceLive.materialSource===view && previous!=null)return previous
         val original=try {XposedHelpers.callMethod(view,"getIcon") as? Drawable}catch(_:Throwable){null}
         val originalBitmap=try {original?.let {XposedHelpers.getObjectField(it,"mBitmap") as? Bitmap}}catch(_:Throwable){null}
-        val expected=originalBitmap?.width ?: original?.intrinsicWidth?.takeIf {it>0} ?: bounds.width()
+        val displayed=displayedIconBounds(view)
+        val expected=displayed?.width() ?: originalBitmap?.width ?: original?.intrinsicWidth?.takeIf {it>0} ?: bounds.width()
         val iconWidth=expected.coerceAtMost((view.width-view.paddingLeft-view.paddingRight).coerceAtLeast(1))
-        val iconHeight=(originalBitmap?.height ?: expected).coerceAtMost(iconWidth)
+        val iconHeight=displayed?.height() ?: (originalBitmap?.height ?: expected).coerceAtMost(iconWidth)
         val location=IntArray(2);view.getLocationOnScreen(location)
         var folder=false;var drawer=false;var node:View?=view
         repeat(16){
@@ -198,8 +202,8 @@ object IconGlassHook {
             node=current.parent as? View
         }
         val metrics=view.resources.displayMetrics
-        return Anchor((location[0]+((view.width-iconWidth)/2).coerceAtLeast(0)).toFloat(),
-            (location[1]+view.paddingTop).toFloat(),metrics.widthPixels,metrics.heightPixels,folder,drawer,iconWidth.toFloat(),iconHeight.toFloat())
+        return Anchor((location[0]+(displayed?.left ?: ((view.width-iconWidth)/2).coerceAtLeast(0))).toFloat(),
+            (location[1]+(displayed?.top ?: view.paddingTop)).toFloat(),metrics.widthPixels,metrics.heightPixels,folder,drawer,iconWidth.toFloat(),iconHeight.toFloat())
             .also {if(!transition && !scaled)viewAnchors[view]=it}
     }
     fun invalidateFolderPreviews(){revision++}
@@ -390,10 +394,13 @@ object IconGlassHook {
         val width=parts.plateMaskBitmap.width
         val height=parts.plateMaskBitmap.height
         if(bounds.width()>width*1.1f || bounds.height()>height*1.1f){
+            if(binding!=null && !binding.foreign)GlassLogger.limited("MaterialEngine","enlarged-binding") {
+                "Retained material ${width}x$height at ${bounds.width()}x${bounds.height()}, bound footprint=${binding.local.width()}x${binding.local.height()}"
+            }
             val save=canvas.save()
             canvas.translate(bounds.left.toFloat(),bounds.top.toFloat())
             canvas.scale(bounds.width().toFloat()/width,bounds.height().toFloat()/height)
-            try {render(canvas,Rect(0,0,width,height),parts,a,wallpaper)}finally{canvas.restoreToCount(save)}
+            try {render(canvas,Rect(0,0,width,height),parts,a,wallpaper,binding)}finally{canvas.restoreToCount(save)}
             return
         }
         val compatible=wallpaper?.takeUnless {it.isRecycled}?.let {WallpaperHelper.forCanvas(it,canvas)}
@@ -539,7 +546,9 @@ object IconGlassHook {
                 val parts=if(gpuDynamic)DynamicIconForeground.plate(nativeParts)else nativeParts
                 val bitmap=raw(sourceIcon)
                 val saved=bitmap?.let {anchors[it]}
-                val capture=bitmap!=null && (bounds.width()>bitmap.width*1.1f || bounds.height()>bitmap.height*1.1f)
+                val displayed=owner?.let(::displayedIconBounds)
+                val capture=bitmap!=null && IconFootprint.isCapture(bounds.width(),bounds.height(),
+                    displayed?.width() ?: bitmap.width,displayed?.height() ?: bitmap.height)
                 val inTransition=LiveBlurEngine.isAppLaunchInProgress || !LiveBlurEngine.isResumed
                 val a=if(surfaceSource!=null)anchor(surfaceSource,Rect(0,0,bitmap?.width ?: 210,bitmap?.height ?: 210)) else if(capture && saved!=null)saved else owner?.let {
                     val nativeBounds=if(bitmap!=null)Rect(0,0,bitmap.width,bitmap.height)else bounds

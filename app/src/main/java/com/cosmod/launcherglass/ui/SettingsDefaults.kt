@@ -161,7 +161,7 @@ object SettingsDefaults {
         SettingsProvider.KEY_STROKE_OPACITY to 40,
         SettingsProvider.KEY_SHADOW_OPACITY to 40,
         SettingsProvider.KEY_GRADIENT_OPACITY to 50
-    )
+    ) + com.cosmod.launcherglass.util.DesktopSizing.defaults
     /** Only portable module preferences. Device reports, language and migration keys stay local. */
     fun portable(): Map<String, Any> = (booleans - SettingsProvider.KEY_BOOT_RESTART - SettingsProvider.KEY_BOOT_RESTART_TOAST - SettingsProvider.KEY_MD3_UI) + integers +
         ScopedSettingsKeys.all.flatMap { scope -> listOf(scope.own to false) +

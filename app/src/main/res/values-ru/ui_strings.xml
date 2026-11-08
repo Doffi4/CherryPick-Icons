@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="ui_desktop_sizing">Размеры и отступы</string>
+    <string name="ui_desktop_icon_size">Иконки и папки</string>
+    <string name="ui_desktop_icon_size_hint">100% — системный размер. Увеличение ограничено шириной ячейки.</string>
+    <string name="ui_desktop_indicator_gaps">Отступы индикатора страниц</string>
+    <string name="ui_desktop_indicator_gaps_hint">Чем меньше значение, тем меньше пустоты вокруг индикатора. Область нажатия сохраняется.</string>
+    <string name="ui_desktop_widget_gaps">Внешние поля виджетов</string>
+    <string name="ui_desktop_widget_gaps_hint">Меньше поля — больше площади внутри ячеек у совместимых виджетов. Размер по ячейкам меняется в редакторе лаунчера.</string>
+    <string name="ui_desktop_bottom_bias">Прижать рабочий стол к доку</string>
+    <string name="ui_desktop_bottom_bias_hint">0% — системное выравнивание. Больше значение — ниже сетка за счёт свободного пространства.</string>
+    <string name="ui_desktop_sizing_restart">Для применения размеров и отступов перезапустите лаунчер. Начальные значения ползунков возвращают системную геометрию.</string>
+    <string name="ui_desktop_title">Конструктор рабочего стола</string>
+    <string name="ui_desktop_hint">Настройте сетку и расставьте иконки и виджеты в редакторе лаунчера. Нестандартные сетки — экспериментальная функция.</string>
+    <string name="ui_desktop_open">Открыть конструктор</string>
+    <string name="ui_desktop_columns">Столбцы</string>
+    <string name="ui_desktop_rows">Строки</string>
+    <string name="ui_desktop_arrange">Расставить элементы</string>
+    <string name="ui_desktop_apply">Применить сетку</string>
+    <string name="ui_desktop_apply_warning">Лаунчер перераспределит иконки и виджеты. Часть элементов может перейти на другую страницу. Возврат прежних размеров сетки не восстановит их позиции.</string>
+    <string name="ui_desktop_unavailable">Конструктор недоступен. Включите CherryPick в LSPosed и перезапустите лаунчер. Эта версия лаунчера может не поддерживаться.</string>
+    <string name="ui_desktop_busy">Лаунчер уже меняет раскладку. Повторите после завершения.</string>
+    <string name="ui_desktop_checking">Проверка…</string>
+    <string name="ui_desktop_preview_hint">На схеме — будущие позиции и размеры элементов каждой страницы. Перемещать их можно в редакторе лаунчера.</string>
+    <string name="ui_desktop_previous">Предыдущая страница</string>
+    <string name="ui_desktop_next">Следующая страница</string>
+    <string name="ui_desktop_preview_summary">%1$d × %2$d · страниц: %3$d</string>
+    <string name="ui_desktop_applying">Применение сетки…</string>
+    <string name="ui_desktop_applied">Сетка применена. Можно расставлять элементы.</string>
+    <string name="ui_desktop_failed">Не удалось применить сетку. Лаунчер перечитает сохранённую раскладку.</string>
+    <string name="ui_desktop_no_space">Не все элементы помещаются в эту сетку. Раскладка не изменена. Выберите сетку побольше.</string>
     <string name="ui_background_blur">Размытие фона</string>
     <string name="ui_blur">Размытие</string>
     <string name="ui_blur_radius">Радиус размытия</string>

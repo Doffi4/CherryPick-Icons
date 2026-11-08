@@ -525,8 +525,8 @@ object IconMaterialRenderer {
         }
     }
 
-    /** Clear glass: the blur of this material is switched off. */
-    fun clearGlass(style:GlassStyle)=style.radius<=0
+    /** Liquid always needs a backdrop for refraction, even with the blur switch off. */
+    fun clearGlass(style:GlassStyle)=!com.cosmod.launcherglass.util.LiquidOptics.needsBackdrop(style.radius,style.liquid)
 
     /** The sampler an element's own draw bound for [material], preferring its latest. */
     private fun foreignSampler(binding:Binding,material:Material,width:Int,height:Int):Sampler? {
@@ -700,7 +700,7 @@ object IconMaterialRenderer {
         // sampler survives the preference transition for one frame.
         if(clearGlass(style))return false
         val scale=toNode.mapRadius(1f).coerceIn(.05f,20f)
-        val screenRadius=style.radius.coerceIn(0,50)*sampler.screenH/800f*(if(style.liquid).28f else 1f)
+        val screenRadius=com.cosmod.launcherglass.util.LiquidOptics.blurRadius(style.radius.coerceIn(0,50),sampler.screenH,style.liquid)
         val radius=kotlin.math.round(screenRadius*scale*4f)/4f
         val edge=minOf(w,h).toFloat()
         val liquid=style.liquid && material.mask!=null

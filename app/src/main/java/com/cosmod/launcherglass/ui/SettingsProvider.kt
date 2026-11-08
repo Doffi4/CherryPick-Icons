@@ -13,6 +13,15 @@ import android.os.Process
 class SettingsProvider : ContentProvider() {
 
     private lateinit var prefs: SharedPreferences
+    private var desktopRequestAt=0L
+
+    @Synchronized private fun desktopRequest(consume:Boolean):Boolean {
+        val now=android.os.SystemClock.elapsedRealtime()
+        if(!consume){desktopRequestAt=now;return true}
+        val pending=desktopRequestAt
+        desktopRequestAt=0L
+        return pending>0L && now-pending in 0L..60_000L
+    }
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
@@ -24,6 +33,14 @@ class SettingsProvider : ContentProvider() {
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         val bundle = Bundle()
         when (method) {
+            METHOD_OPEN_DESKTOP -> {
+                enforceCaller(allowLauncher=false)
+                bundle.putBoolean("pending",desktopRequest(false))
+            }
+            METHOD_CONSUME_DESKTOP -> {
+                enforceCaller(allowLauncher=true)
+                bundle.putBoolean("pending",desktopRequest(true))
+            }
             METHOD_REPORT_ICON_APPEARANCE -> {
                 enforceCaller(allowLauncher = true)
                 val support=extras?.getInt(KEY_NATIVE_FLUX_SUPPORT,0) ?: 0
@@ -40,6 +57,9 @@ class SettingsProvider : ContentProvider() {
                 }
             }
             METHOD_GET_ALL -> {
+                com.cosmod.launcherglass.util.DesktopSizing.defaults.forEach {(key,fallback) ->
+                    bundle.putInt(key,prefs.getInt(key,fallback))
+                }
                 bundle.putBoolean(KEY_GPU_EFFECTS,prefs.getBoolean(KEY_GPU_EFFECTS,true))
                 for(scope in ScopedSettingsKeys.all){
                     bundle.putBoolean(scope.own,prefs.getBoolean(scope.own,false))
@@ -118,6 +138,9 @@ class SettingsProvider : ContentProvider() {
                 enforceCaller()
                 extras?.let { b ->
                     val editor = prefs.edit()
+                    com.cosmod.launcherglass.util.DesktopSizing.ranges.forEach {(key,range) ->
+                        if(b.containsKey(key))editor.putInt(key,b.getInt(key).coerceIn(range))
+                    }
                     if(b.containsKey(KEY_GPU_EFFECTS))editor.putBoolean(KEY_GPU_EFFECTS,b.getBoolean(KEY_GPU_EFFECTS))
                     for(scope in ScopedSettingsKeys.all){
                         if(b.containsKey(scope.own))editor.putBoolean(scope.own,b.getBoolean(scope.own))
@@ -214,6 +237,8 @@ class SettingsProvider : ContentProvider() {
         const val KEY_NATIVE_ICON_DARK = "native_icon_dark"
         const val KEY_NATIVE_FLUX_SUPPORT = "native_flux_support"
         const val METHOD_GET_ALL = "getAll"
+        const val METHOD_OPEN_DESKTOP = "openDesktopDesigner"
+        const val METHOD_CONSUME_DESKTOP = "consumeDesktopDesigner"
         const val METHOD_SET = "set"
 
         const val KEY_LIGHT_HUE = "color_light_hue"
